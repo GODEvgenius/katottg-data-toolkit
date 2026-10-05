@@ -1,12 +1,14 @@
 # KATOTTG Data Toolkit
 
+**Working online version / Працююча версія:** [Open the service — Відкрити сервіс](https://ontonew.snman.science/katottg/index.html).
+
 A browser-based toolkit for preparing Ukraine's administrative and territorial-status data from Word and Excel, exporting JSON and XLSX, and connecting the result to administrative boundaries in GeoJSON.
 
 The main focus is **data preparation**: bringing fragmented source tables into a consistent structure with full KATOTTG codes, source references, status histories and an administrative hierarchy. A table, hierarchy and map viewer help inspect the prepared result.
 
 **This repository contains software and documentation only.** Source documents, prepared datasets and geographic files are not distributed here. Supply your own inputs from the providers listed below. Local inputs and generated `data_files/` are excluded from Git.
 
-**Related live service:** [ATU objects with occupation-status data](https://ontonew.snman.science/katottg/index.html). It supports finding administrative objects and their identifiers, browsing subordinate objects, filtering by status, and viewing results as a table, hierarchy or map. The existing service may run a different version from this repository.
+The working service, **“ATU objects with occupation-status data,”** supports finding administrative objects and their identifiers, browsing subordinate objects, filtering by status, and viewing results as a table, hierarchy or map. The deployed service may run a different version from this repository.
 
 ![Data preparation pipeline](docs/assets/data-pipeline.svg)
 
