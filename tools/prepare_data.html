@@ -1,0 +1,1590 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Генератор даних КАТОТТГ та універсальний процесор геоданих</title>
+  <!-- Local browser libraries: file:// and offline use are supported. -->
+  <script src="vendor/tailwind.js"></script>
+  <script src="vendor/xlsx.full.min.js"></script>
+  <!-- JSZip for batch zip packaging -->
+  <script src="vendor/jszip.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="vendor/lucide.js"></script>
+  <script src="status_summary.js"></script>
+  <script src="prepare_data_core.js"></script>
+  <style>
+    .dropzone.dragover {
+      border-color: #3b82f6;
+      background-color: #eff6ff;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-blue-600 text-white rounded-lg shadow-sm">
+          <i data-lucide="layers" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold text-slate-900 leading-tight">Універсальний сервіс підготовки даних та геоструктури КАТОТТГ</h1>
+          <p class="text-xs text-slate-500">Word / Excel → data.json та XLSX + перекодування GeoJSON для кінцевого сервісу</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <a href="../index.html" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 transition-colors shadow-xs">
+          <i data-lucide="map" class="w-3.5 h-3.5 mr-1.5 text-blue-600"></i> До карти КАТОТТГ
+        </a>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5 mr-1"></i> Автономний клієнтський режим (100% браузер)
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- Stepper Navigation -->
+    <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">1</div>
+        <div>
+          <h2 class="text-sm font-semibold text-slate-900">Модуль А: Word / Excel → JSON та XLSX</h2>
+          <p class="text-xs text-slate-500">Ієрархія рівнів 1–4 + деокупація / статуси</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3 md:border-l md:border-slate-200 md:pl-4">
+        <div class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">2</div>
+        <div>
+          <h2 class="text-sm font-semibold text-slate-900">Модуль Б: Перекодування геоданих</h2>
+          <p class="text-xs text-slate-500">Сумісність назв admX + структура GeoJSON</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3 md:border-l md:border-slate-200 md:pl-4">
+        <div class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">3</div>
+        <div>
+          <h2 class="text-sm font-semibold text-slate-900">Експорт: Завантаження файлів</h2>
+          <p class="text-xs text-slate-500">Окремо або всі файли разом для data_files</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE A: DATA.JSON GENERATOR -->
+    <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="file-spreadsheet" class="w-5 h-5 text-blue-600"></i>
+          <h2 class="font-semibold text-slate-900">Модуль А: Об'єднання таблиць Word та Excel</h2>
+        </div>
+        <span class="text-xs text-slate-500">Повний код КАТОТТГ + 5-значний ідентифікатор + хронологія наказів</span>
+      </div>
+
+      <div class="p-6 space-y-6">
+        <!-- Dropzones Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          <!-- Dropzone 1: Kodifikator -->
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-slate-700 flex items-center justify-between">
+              <span>1. Кодифікатор КАТОТТГ (необов'язково)</span>
+              <span id="kodifikatorStatus" class="text-xs text-slate-400">Очікує файл</span>
+            </label>
+            <div id="dropzoneKodifikator" class="dropzone border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-400 transition-colors cursor-pointer bg-slate-50/50">
+              <input type="file" id="fileKodifikator" accept=".docx,.xlsx,.xls" multiple class="hidden">
+              <i data-lucide="file-down" class="w-10 h-10 mx-auto text-slate-400 mb-2"></i>
+              <p class="text-sm font-medium text-slate-700">Додайте один або кілька файлів кодифікатора</p>
+              <p class="text-xs text-slate-500 mt-1">Word (.docx) або Excel (.xlsx, .xls) — для повної ієрархії країни</p>
+              <div id="kodifikatorFileInfo" class="hidden mt-3 p-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 font-medium"></div>
+            </div>
+          </div>
+
+          <!-- Dropzone 2: Occupation order -->
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-slate-700 flex items-center justify-between">
+              <span>2. Накази про окупацію / бойові дії</span>
+              <span id="occupationStatus" class="text-xs text-slate-400">Очікує файл</span>
+            </label>
+            <div id="dropzoneOccupation" class="dropzone border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-400 transition-colors cursor-pointer bg-slate-50/50">
+              <input type="file" id="fileOccupation" accept=".docx,.xlsx,.xls" multiple class="hidden">
+              <i data-lucide="file-text" class="w-10 h-10 mx-auto text-slate-400 mb-2"></i>
+              <p class="text-sm font-medium text-slate-700">Додайте один або кілька наказів Word / Excel</p>
+              <p class="text-xs text-slate-500 mt-1">Можна змішувати .docx, .xlsx та .xls; наступний вибір додає файли до списку</p>
+              <div id="occupationFileInfo" class="hidden mt-3 p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 font-medium"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Action Button & Options -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-100">
+          <div class="text-xs text-slate-500 flex items-center space-x-1.5">
+            <i data-lucide="info" class="w-4 h-4 text-blue-500 flex-shrink-0"></i>
+            <span>Файли можна додавати у будь-яке поле — тип визначається за вмістом таблиць. Знаходить усі таблиці / аркуші та колонки, зберігає історію і прибирає повтори. Без кодифікатора експортує території з наказів; із кодифікатором — повну базу. Геоприв'язка завжди використовує data.json.</span>
+          </div>
+          <button id="btnProcess" disabled class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-2.5 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors">
+            <i data-lucide="cog" class="w-4 h-4 mr-2" id="btnProcessIcon"></i>
+            <span id="btnProcessText">Об'єднати та підготувати JSON / XLSX</span>
+          </button>
+        </div>
+
+        <div id="importReport" class="hidden p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs text-slate-700 space-y-2" role="status" aria-live="polite"></div>
+
+        <!-- Progress Bar & Status -->
+        <div id="progressContainer" class="hidden space-y-2">
+          <div class="flex justify-between text-xs font-medium text-slate-600">
+            <span id="progressLabel">Обробка даних...</span>
+            <span id="progressPercent">0%</span>
+          </div>
+          <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+            <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-200" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Live Statistics Panel -->
+        <div id="statsPanel" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <div class="p-3 bg-white rounded-lg border border-slate-100 shadow-xs">
+            <div class="text-xs text-slate-500">Всього об'єктів КАТОТТГ</div>
+            <div class="text-xl font-bold text-slate-900 mt-1" id="statTotalKatottg">0</div>
+          </div>
+          <div class="p-3 bg-white rounded-lg border border-slate-100 shadow-xs">
+            <div class="text-xs text-slate-500">Записів у наказі окупації</div>
+            <div class="text-xl font-bold text-slate-900 mt-1" id="statTotalOccup">0</div>
+          </div>
+          <div class="p-3 bg-white rounded-lg border border-slate-100 shadow-xs">
+            <div class="text-xs text-slate-500">Територій зі статусами</div>
+            <div class="text-xl font-bold text-emerald-600 mt-1" id="statMatched">0</div>
+          </div>
+          <div class="p-3 bg-white rounded-lg border border-slate-100 shadow-xs">
+            <div class="text-xs text-slate-500">Об'єктів з &gt;1 версіями статусів</div>
+            <div class="text-xl font-bold text-amber-600 mt-1" id="statMultiVersion">0</div>
+          </div>
+        </div>
+
+        <!-- Preview & Download Actions -->
+        <div id="downloadSection" class="hidden p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4">
+          <div class="flex items-center space-x-3">
+            <div class="p-2 bg-emerald-600 text-white rounded-lg">
+              <i data-lucide="check-circle" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-emerald-950">JSON та об'єднаний Excel готові до завантаження!</h3>
+              <p class="text-xs text-emerald-700" id="downloadStatsText">Усі версії дедупліковано, хронологію вибудувано.</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+            <button id="btnPreview" class="flex-1 md:flex-none inline-flex items-center justify-center px-3.5 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs">
+              <i data-lucide="eye" class="w-3.5 h-3.5 mr-1.5"></i> Перегляд
+            </button>
+            <button id="btnDownloadJson" class="flex-1 md:flex-none inline-flex items-center justify-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors">
+              <i data-lucide="download" class="w-3.5 h-3.5 mr-1.5"></i> Лише data.json
+            </button>
+            <button id="btnDownloadXlsx" class="flex-1 md:flex-none inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors">
+              <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 mr-1.5"></i> Об'єднаний Excel (.xlsx)
+            </button>
+            <button id="btnDownloadAllFromModuleA" class="flex-1 md:flex-none inline-flex items-center justify-center px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-extrabold shadow-sm transition-colors ring-2 ring-emerald-400/50">
+              <i data-lucide="download-cloud" class="w-3.5 h-3.5 mr-1.5 text-emerald-400"></i> Скачати всі файли разом (ZIP)
+            </button>
+          </div>
+        </div>
+
+        <!-- Log & Preview Output -->
+        <div id="previewModal" class="hidden border border-slate-200 rounded-xl overflow-hidden">
+          <div class="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center justify-between text-xs font-semibold text-slate-700">
+            <span>Зразок перших 3 згенерованих об'єктів з data.json</span>
+            <button id="btnClosePreview" class="text-slate-500 hover:text-slate-800">Закрити</button>
+          </div>
+          <pre id="jsonPreviewContent" class="p-4 bg-slate-900 text-slate-100 text-xs font-mono max-h-96 overflow-y-auto"></pre>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- MODULE B: UNIVERSAL GEOJSON PROCESSOR & STRUCTURE RE-CODER -->
+    <section class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="folder-cog" class="w-5 h-5 text-indigo-600"></i>
+          <h2 class="font-semibold text-slate-900">Модуль Б: Універсальне перекодування та структурування геоданих</h2>
+        </div>
+        <span class="text-xs text-slate-500">Сумісність для кінцевого сервісу + структура за рівнями</span>
+      </div>
+
+      <div class="p-6 space-y-6">
+        <p class="text-sm text-slate-600 leading-relaxed">
+          Забезпечує повну сумісність із кінцевими веб-сервісами (карти, дашборди, API): зберігає оригінальні назви файлів та властивостей (<code class="px-1.5 py-0.5 bg-slate-100 rounded text-slate-800 text-xs font-mono font-semibold">admX_name1</code>, <code class="px-1.5 py-0.5 bg-slate-100 rounded text-slate-800 text-xs font-mono font-semibold">admX_pcode</code>), збагачує їх структурованими даними КАТОТТГ, оптимізує точність координат і дозволяє згенерувати як єдиний набір, так і розбивку населених пунктів за областями для швидкого завантаження.
+        </p>
+
+        <!-- Dropzone with folder/files triggers -->
+        <div class="space-y-3">
+          <div id="dropzoneGeoBatch" class="dropzone border-2 border-dashed border-indigo-200 rounded-xl p-8 text-center hover:border-indigo-400 transition-colors bg-indigo-50/20">
+            <i data-lucide="folders" class="w-12 h-12 mx-auto text-indigo-500 mb-3"></i>
+            <h3 class="text-base font-semibold text-slate-800">Перетягніть сюди папку geojson або файли геоданих</h3>
+            <p class="text-xs text-slate-500 mt-1 mb-4">Автоматичне виявлення всіх .geojson або .json файлів рівнів 0, 1, 2, 3, 4, ліній, точок та адмінцентрів</p>
+
+            <div class="flex flex-wrap items-center justify-center gap-3">
+              <!-- Folder select button -->
+              <label for="folderGeoInput" class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-xs transition-colors">
+                <i data-lucide="folder-up" class="w-4 h-4 mr-1.5"></i> Обрати папку з файлами
+              </label>
+              <input type="file" id="folderGeoInput" webkitdirectory directory multiple class="hidden">
+
+              <!-- Multiple files select button -->
+              <label for="filesGeoInput" class="inline-flex items-center px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer shadow-xs transition-colors">
+                <i data-lucide="files" class="w-4 h-4 mr-1.5"></i> Обрати окремі файли
+              </label>
+              <input type="file" id="filesGeoInput" multiple accept=".geojson, .json" class="hidden">
+
+              <!-- Optional data.json attachment button -->
+              <label for="attachDataJsonInput" class="inline-flex items-center px-4 py-2 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-800 rounded-lg text-xs font-semibold cursor-pointer shadow-xs transition-colors">
+                <i data-lucide="link" class="w-4 h-4 mr-1.5"></i> <span id="attachJsonLabel">Прив'язати data.json (для збагачення)</span>
+              </label>
+              <input type="file" id="attachDataJsonInput" accept=".json" class="hidden">
+            </div>
+          </div>
+        </div>
+
+        <!-- NEW: UNIVERSAL SETTINGS PANEL -->
+        <div class="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+          <div class="flex items-center space-x-2 border-b border-slate-200 pb-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-indigo-600"></i>
+            <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Параметри універсалізації та структури файлів</h3>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Naming scheme options -->
+            <div class="space-y-2">
+              <label class="block text-xs font-bold text-slate-700">1. Схема найменування файлів для кінцевого сервісу:</label>
+              <div class="space-y-2">
+                <label class="flex items-start space-x-2 text-xs text-slate-700 cursor-pointer">
+                  <input type="radio" name="namingScheme" value="exact" checked class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+                  <div>
+                    <span class="font-semibold text-slate-900">Точні оригінальні назви (Сумісність для кінцевого сервісу)</span>
+                    <p class="text-[11px] text-slate-500">Зберігає як <code class="text-indigo-600">ukr_admin0.geojson</code> ... <code class="text-indigo-600">ukr_admin4.geojson</code>. Кінцевий сервіс шукатиме саме ці назви без збоїв.</p>
+                  </div>
+                </label>
+                <label class="flex items-start space-x-2 text-xs text-slate-700 cursor-pointer">
+                  <input type="radio" name="namingScheme" value="optimized" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+                  <div>
+                    <span class="font-semibold text-slate-900">Суфікс оптимізації (*.optimized.geojson)</span>
+                    <p class="text-[11px] text-slate-500">Зберігає з суфіксом <code class="text-indigo-600">.optimized.geojson</code> поруч з оригіналами.</p>
+                  </div>
+                </label>
+                <label class="flex items-start space-x-2 text-xs text-slate-700 cursor-pointer">
+                  <input type="radio" name="namingScheme" value="semantic" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+                  <div>
+                    <span class="font-semibold text-slate-900">Семантичні імена за рівнями</span>
+                    <p class="text-[11px] text-slate-500">Наприклад, <code class="text-indigo-600">ukr_level1_oblasts.geojson</code>, <code class="text-indigo-600">ukr_level3_hromadas.geojson</code>.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Structure options -->
+            <div class="space-y-2">
+              <label class="block text-xs font-bold text-slate-700">2. Структура геоданих та атрибутів:</label>
+              <div class="space-y-2">
+                <label class="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
+                  <input type="checkbox" id="chkPreserveOriginalProps" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                  <span>Зберегти всі оригінальні поля (<code class="font-mono">admX_name1</code>, <code class="font-mono">admX_pcode</code>, <code class="font-mono">area_sqkm</code>...)</span>
+                </label>
+                <label class="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
+                  <input type="checkbox" id="chkInjectKatottg" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                  <span>Впровадити уніфікований набір даних КАТОТТГ (рівні, батьківські одиниці, статуси окупації)</span>
+                </label>
+                <label class="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
+                  <input type="checkbox" id="chkLevelFolders" class="rounded text-indigo-600 focus:ring-indigo-500">
+                  <span>Структурувати архів за папками рівнів (<code class="font-mono">1_oblasts/</code>, <code class="font-mono">2_raions/</code>...)</span>
+                </label>
+                <label class="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
+                  <input type="checkbox" id="chkRegionalSplit" class="rounded text-indigo-600 focus:ring-indigo-500">
+                  <span>Генерувати розбивку населених пунктів за областями (~3-5 МБ)</span>
+                </label>
+                <label class="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
+                  <input type="checkbox" id="chkManifest" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                  <span>Сформувати маніфест структури даних (<code class="font-mono">manifest.json</code>)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detected Files Table -->
+        <div id="geoFilesListContainer" class="hidden space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Виявлені файли геоданих (<span id="geoFilesCount">0</span>)</h3>
+              <p class="text-xs text-slate-500">Загальний вихідний обсяг: <span id="geoTotalOrigSize" class="font-semibold text-slate-700">0 MB</span></p>
+            </div>
+            <button id="btnProcessAllGeo" class="inline-flex items-center px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors">
+              <i data-lucide="play" class="w-4 h-4 mr-1.5" id="btnProcessAllGeoIcon"></i>
+              <span id="btnProcessAllGeoText">Обробити та перекодувати всі файли</span>
+            </button>
+          </div>
+
+          <!-- Table of files -->
+          <div class="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+            <table class="min-w-full divide-y divide-slate-200 text-xs">
+              <thead class="bg-slate-50 text-slate-600 font-semibold">
+                <tr>
+                  <th class="px-4 py-3 text-left">Файл джерела</th>
+                  <th class="px-4 py-3 text-left">Вихідне ім'я для сервісу</th>
+                  <th class="px-4 py-3 text-right">Початковий</th>
+                  <th class="px-4 py-3 text-right">Оптимізований</th>
+                  <th class="px-4 py-3 text-center">КАТОТТГ матчинг</th>
+                  <th class="px-4 py-3 text-center">Статус</th>
+                  <th class="px-4 py-3 text-center">Дія</th>
+                </tr>
+              </thead>
+              <tbody id="geoFilesTableBody" class="divide-y divide-slate-100 bg-white">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Batch Optimization Progress -->
+        <div id="geoBatchProgressContainer" class="hidden space-y-2">
+          <div class="flex justify-between text-xs font-medium text-slate-600">
+            <span id="geoBatchProgressLabel">Перекодування та оптимізація геоданих...</span>
+            <span id="geoBatchProgressPercent">0%</span>
+          </div>
+          <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+            <div id="geoBatchProgressBar" class="bg-indigo-600 h-2 rounded-full transition-all duration-200" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Batch Download Section -->
+        <div id="geoBatchDownloadSection" class="hidden p-5 bg-indigo-50 border border-indigo-200 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4">
+          <div class="flex items-center space-x-3">
+            <div class="p-2.5 bg-indigo-600 text-white rounded-lg">
+              <i data-lucide="check-check" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-indigo-950">Перекодування та оптимізацію структури геоданих завершено!</h3>
+              <p class="text-xs text-indigo-700" id="geoBatchSummaryText">
+                Початковий розмір: <span id="summaryOrig" class="font-bold">0 MB</span> → Оптимізований: <span id="summaryOpt" class="font-bold text-emerald-700">0 MB</span> (заощаджено <span id="summarySaved" class="font-bold text-emerald-700">0%</span>)
+              </p>
+              <p class="text-xs text-indigo-800 mt-1 font-medium" id="geoBatchStructureText">
+                Всі оригінальні поля збережено. Додано структуру КАТОТТГ за рівнями 1-4.
+              </p>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+            <button id="btnDownloadAllGeoZip" class="flex-1 md:flex-none inline-flex items-center justify-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors">
+              <i data-lucide="archive" class="w-4 h-4 mr-1.5"></i> Лише геодані (ZIP)
+            </button>
+            <button id="btnDownloadAllFromModuleB" class="flex-1 md:flex-none inline-flex items-center justify-center px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-extrabold shadow-sm transition-colors ring-2 ring-indigo-400/50">
+              <i data-lucide="download-cloud" class="w-4 h-4 mr-1.5 text-indigo-300"></i> Скачати всі файли разом (ZIP)
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- MODULE C: MASTER UNIFIED DOWNLOAD HUB (ALL FILES TOGETHER) -->
+    <section class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl border border-indigo-400/30 text-white shadow-xl overflow-hidden p-6 sm:p-8 space-y-6">
+      <div class="flex flex-col items-start gap-6">
+        <div class="space-y-2 max-w-2xl">
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            <i data-lucide="package-check" class="w-3.5 h-3.5"></i> Єдиний центр експорту для data_files
+          </div>
+          <h2 class="text-xl sm:text-2xl font-bold tracking-tight text-white">Пакетне збереження файлів для системи</h2>
+          <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            Можна завантажити окремо <code class="px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400 font-mono">data.json</code>, об'єднаний Excel, геодані або зберегти <strong>всі файли разом в один клік</strong>. Повний архів містить JSON, згенерований Excel, геометрії та паспорт <code class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 font-mono">manifest.json</code>.
+          </p>
+        </div>
+
+        <!-- Buttons group -->
+        <div class="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 w-full">
+          <!-- Download only JSON -->
+          <button id="btnDownloadJsonSecondary" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all shadow-sm">
+            <i data-lucide="file-json" class="w-4 h-4 mr-2 text-emerald-400"></i> Лише data.json
+          </button>
+          <button id="btnDownloadXlsxSecondary" disabled class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm">
+            <i data-lucide="file-spreadsheet" class="w-4 h-4 mr-2 text-blue-400"></i> Об'єднаний Excel
+          </button>
+
+          <!-- Download only Geo -->
+          <button id="btnDownloadGeoOnly" class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl text-xs font-semibold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all shadow-sm">
+            <i data-lucide="map" class="w-4 h-4 mr-2 text-indigo-400"></i> Лише геодані (ZIP)
+          </button>
+
+          <!-- Master button: ALL FILES TOGETHER -->
+          <button id="btnDownloadAllMasterZip" class="inline-flex items-center justify-center px-6 py-3.5 rounded-xl text-sm font-extrabold bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 transition-all shadow-lg hover:shadow-emerald-500/25 ring-2 ring-emerald-400/60 cursor-pointer">
+            <i data-lucide="download-cloud" class="w-5 h-5 mr-2.5"></i>
+            <span>Скачати всі файли разом (ZIP)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick status overview of files in bundle -->
+      <div class="mt-6 pt-6 border-t border-slate-700/60 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+        <div class="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/10">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="database" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <div class="font-bold text-white">data.json</div>
+            <div class="text-slate-400 text-[11px]" id="hubStatusDataJson">Очікує генерації в Модулі А</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/10">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="layers" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <div class="font-bold text-white">Геофайли (.geojson)</div>
+            <div class="text-slate-400 text-[11px]" id="hubStatusGeo">8 шарів / адмінмежі</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 bg-white/5 p-3 rounded-xl border border-white/10">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center flex-shrink-0">
+            <i data-lucide="file-check" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <div class="font-bold text-white">manifest.json</div>
+            <div class="text-slate-400 text-[11px]">Автоматичний паспорт архіву</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Official source of the codifier -->
+    <section id="katottgSource" aria-labelledby="katottgSourceTitle" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex items-center gap-2">
+        <i data-lucide="book-open" class="w-5 h-5 text-indigo-600 flex-shrink-0" aria-hidden="true"></i>
+        <h2 id="katottgSourceTitle" class="font-semibold text-slate-900">Офіційне джерело КАТОТТГ</h2>
+      </div>
+      <div class="p-6 flex flex-col md:flex-row md:items-center gap-4">
+        <p class="text-sm text-slate-600 flex-1">Кодифікатор адміністративно-територіальних одиниць та територій територіальних громад. Завантажте потрібну редакцію та додайте файл у модулі А.</p>
+        <a href="https://mininfra.gov.ua/diialnist/rozvytok-mistsevoho-samovriaduvannia/kodyfikator-administratyvno-terytorialnykh-odynyts-ta-terytorii-terytorialnykh-hromad" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-indigo-200 bg-indigo-50 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 hover:border-indigo-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors flex-shrink-0">
+          <span>Відкрити джерело КАТОТТГ</span>
+          <i data-lucide="external-link" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+        </a>
+      </div>
+    </section>
+
+    <!-- Possible sources of geodata -->
+    <section id="geodataSources" aria-labelledby="geodataSourcesTitle" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex items-center gap-2">
+        <i data-lucide="globe" class="w-5 h-5 text-indigo-600 flex-shrink-0"></i>
+        <h2 id="geodataSourcesTitle" class="font-semibold text-slate-900">Можливі джерела геоданих</h2>
+      </div>
+      <div class="p-6 space-y-4">
+        <p class="text-sm text-slate-600">Оберіть джерело та завантажте потрібні геофайли. Для модуля Б потрібен формат GeoJSON (.geojson або .json).</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <a href="https://data.humdata.org/dataset/cod-ab-ukr" target="_blank" rel="noopener noreferrer" class="flex flex-col gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50/50 hover:bg-blue-50 hover:border-blue-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors">
+            <div class="flex items-start justify-between gap-2">
+              <h3 class="text-sm font-bold text-blue-900">HDX — Україна (COD-AB)</h3>
+              <i data-lucide="external-link" class="w-4 h-4 text-blue-600 flex-shrink-0" aria-hidden="true"></i>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">Сторінка набору cod-ab-ukr на Humanitarian Data Exchange із файлами геоданих для України.</p>
+            <span class="text-xs font-semibold text-blue-700 mt-auto">Відкрити набір на HDX ↗</span>
+          </a>
+          <a href="https://www.geoboundaries.org/countryDownloads.html" target="_blank" rel="noopener noreferrer" class="flex flex-col gap-3 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors">
+            <div class="flex items-start justify-between gap-2">
+              <h3 class="text-sm font-bold text-slate-900">geoBoundaries</h3>
+              <i data-lucide="external-link" class="w-4 h-4 text-indigo-600 flex-shrink-0" aria-hidden="true"></i>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">Каталог адміністративних меж за країнами та рівнями. Оберіть Україну (UKR) і потрібний шар у GeoJSON.</p>
+            <span class="text-xs font-semibold text-indigo-700 mt-auto">Відкрити каталог меж ↗</span>
+          </a>
+          <a href="https://download.geofabrik.de/europe/ukraine.html" target="_blank" rel="noopener noreferrer" class="flex flex-col gap-3 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 hover:border-indigo-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors">
+            <div class="flex items-start justify-between gap-2">
+              <h3 class="text-sm font-bold text-slate-900">Geofabrik — OpenStreetMap</h3>
+              <i data-lucide="external-link" class="w-4 h-4 text-indigo-600 flex-shrink-0" aria-hidden="true"></i>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">Вивантаження даних OpenStreetMap для України. Файли PBF або Shapefile потрібно спочатку перетворити на GeoJSON.</p>
+            <span class="text-xs font-semibold text-indigo-700 mt-auto">Відкрити геодані України ↗</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Script Logic -->
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // State
+    let fileKodifikatorData = [];
+    let fileOccupationData = [];
+    let generatedDataJson = null;
+    let generatedResult = null;
+    let generatedWorkbookBytes = null;
+    let importReports = [];
+    let isProcessingData = false;
+    let isProcessingGeo = false;
+
+    // Elements
+    const dropzoneKodifikator = document.getElementById('dropzoneKodifikator');
+    const fileKodifikatorInput = document.getElementById('fileKodifikator');
+    const kodifikatorFileInfo = document.getElementById('kodifikatorFileInfo');
+    const kodifikatorStatus = document.getElementById('kodifikatorStatus');
+
+    const dropzoneOccupation = document.getElementById('dropzoneOccupation');
+    const fileOccupationInput = document.getElementById('fileOccupation');
+    const occupationFileInfo = document.getElementById('occupationFileInfo');
+    const occupationStatus = document.getElementById('occupationStatus');
+
+    const btnProcess = document.getElementById('btnProcess');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressLabel = document.getElementById('progressLabel');
+    const progressPercent = document.getElementById('progressPercent');
+
+    const statsPanel = document.getElementById('statsPanel');
+    const statTotalKatottg = document.getElementById('statTotalKatottg');
+    const statTotalOccup = document.getElementById('statTotalOccup');
+    const statMatched = document.getElementById('statMatched');
+    const statMultiVersion = document.getElementById('statMultiVersion');
+
+    const downloadSection = document.getElementById('downloadSection');
+    const downloadStatsText = document.getElementById('downloadStatsText');
+    const btnDownloadJson = document.getElementById('btnDownloadJson');
+    const btnDownloadXlsx = document.getElementById('btnDownloadXlsx');
+    const importReport = document.getElementById('importReport');
+    const btnPreview = document.getElementById('btnPreview');
+    const previewModal = document.getElementById('previewModal');
+    const jsonPreviewContent = document.getElementById('jsonPreviewContent');
+    const btnClosePreview = document.getElementById('btnClosePreview');
+
+    // Geo Batch Elements
+    const dropzoneGeoBatch = document.getElementById('dropzoneGeoBatch');
+    const folderGeoInput = document.getElementById('folderGeoInput');
+    const filesGeoInput = document.getElementById('filesGeoInput');
+    const geoFilesListContainer = document.getElementById('geoFilesListContainer');
+    const geoFilesCount = document.getElementById('geoFilesCount');
+    const geoTotalOrigSize = document.getElementById('geoTotalOrigSize');
+    const geoFilesTableBody = document.getElementById('geoFilesTableBody');
+    const btnProcessAllGeo = document.getElementById('btnProcessAllGeo');
+    const geoBatchProgressContainer = document.getElementById('geoBatchProgressContainer');
+    const geoBatchProgressBar = document.getElementById('geoBatchProgressBar');
+    const geoBatchProgressLabel = document.getElementById('geoBatchProgressLabel');
+    const geoBatchProgressPercent = document.getElementById('geoBatchProgressPercent');
+    const geoBatchDownloadSection = document.getElementById('geoBatchDownloadSection');
+    const summaryOrig = document.getElementById('summaryOrig');
+    const summaryOpt = document.getElementById('summaryOpt');
+    const summarySaved = document.getElementById('summarySaved');
+    const geoBatchStructureText = document.getElementById('geoBatchStructureText');
+    const btnDownloadAllGeoZip = document.getElementById('btnDownloadAllGeoZip');
+
+    // Options elements
+    const chkPreserveOriginalProps = document.getElementById('chkPreserveOriginalProps');
+    const chkInjectKatottg = document.getElementById('chkInjectKatottg');
+    const chkLevelFolders = document.getElementById('chkLevelFolders');
+    const chkRegionalSplit = document.getElementById('chkRegionalSplit');
+    const chkManifest = document.getElementById('chkManifest');
+
+    let batchGeoFiles = []; // Array of { id, file, name, outName, level, origSize, optSize, optData, matchedCount, status, regionalSettlements }
+
+    // Map naming schemes
+    function getOutputFilename(srcName) {
+      const selectedScheme = document.querySelector('input[name="namingScheme"]:checked')?.value || 'exact';
+      const cleanBase = srcName.replace(/\.optimized\.geojson$/i, '.geojson').replace(/\.optimized\.json$/i, '.json');
+
+      if (selectedScheme === 'exact') {
+        return cleanBase;
+      } else if (selectedScheme === 'optimized') {
+        return cleanBase.replace(/\.geojson$/i, '.optimized.geojson').replace(/\.json$/i, '.optimized.json');
+      } else if (selectedScheme === 'semantic') {
+        if (cleanBase.includes('admin0')) return 'ukr_level0_country.geojson';
+        if (cleanBase.includes('admin1')) return 'ukr_level1_oblasts.geojson';
+        if (cleanBase.includes('admin2')) return 'ukr_level2_raions.geojson';
+        if (cleanBase.includes('admin3')) return 'ukr_level3_hromadas.geojson';
+        if (cleanBase.includes('admin4')) return 'ukr_level4_settlements.geojson';
+        if (cleanBase.includes('admincapitals')) return 'ukr_aux_capitals.geojson';
+        if (cleanBase.includes('adminlines')) return 'ukr_aux_lines.geojson';
+        if (cleanBase.includes('adminpoints')) return 'ukr_aux_points.geojson';
+        return cleanBase;
+      }
+      return cleanBase;
+    }
+
+    // React to naming scheme change
+    document.querySelectorAll('input[name="namingScheme"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        batchGeoFiles.forEach(f => {
+          f.outName = getOutputFilename(f.name);
+        });
+        renderGeoTable();
+      });
+    });
+
+    // --- MULTIPLE WORD / EXCEL INPUTS ---
+    function setupDropzone(dropzone, input, onFiles) {
+      dropzone.addEventListener('click', e => {
+        if (!isProcessingData && !isProcessingGeo && e.target !== input && !e.target.closest('button')) input.click();
+      });
+      dropzone.addEventListener('dragover', e => {
+        e.preventDefault();
+        if (!isProcessingData && !isProcessingGeo) dropzone.classList.add('dragover');
+      });
+      dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+      dropzone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (!isProcessingData && !isProcessingGeo) onFiles(Array.from(e.dataTransfer.files));
+      });
+      input.addEventListener('change', e => {
+        if (!isProcessingData && !isProcessingGeo) onFiles(Array.from(e.target.files));
+        input.value = '';
+      });
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes) return '0 B';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function invalidateGeoOutputs() {
+      for (const item of batchGeoFiles) {
+        item.status = 'pending';
+        item.optData = null;
+        item.optSize = 0;
+        item.matchedCount = 0;
+        item.regionalSettlements = null;
+        item.error = null;
+      }
+      geoBatchDownloadSection.classList.add('hidden');
+      renderGeoTable();
+    }
+
+    function invalidateDataOutputs() {
+      generatedDataJson = null;
+      generatedResult = null;
+      generatedWorkbookBytes = null;
+      importReports = [];
+      downloadSection.classList.add('hidden');
+      previewModal.classList.add('hidden');
+      statsPanel.classList.add('hidden');
+      importReport.classList.add('hidden');
+      progressContainer.classList.add('hidden');
+      document.getElementById('btnDownloadXlsxSecondary').disabled = true;
+      document.getElementById('hubStatusDataJson').textContent = 'Очікує генерації в Модулі А';
+      const label = document.getElementById('attachJsonLabel');
+      label.textContent = "Прив'язати data.json (для збагачення)";
+      label.parentElement.classList.remove('bg-emerald-600', 'text-white');
+      label.parentElement.classList.add('bg-emerald-50', 'text-emerald-800');
+      invalidateGeoOutputs();
+    }
+
+    function renderInputFiles(kind) {
+      const isKodifikator = kind === 'kodifikator';
+      const files = isKodifikator ? fileKodifikatorData : fileOccupationData;
+      const info = isKodifikator ? kodifikatorFileInfo : occupationFileInfo;
+      const status = isKodifikator ? kodifikatorStatus : occupationStatus;
+      info.replaceChildren();
+      info.classList.toggle('hidden', !files.length);
+      status.textContent = files.length ? `${files.length} файл(ів)` : 'Очікує файл';
+      for (const [index, file] of files.entries()) {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between gap-2 py-1 text-left';
+        const name = document.createElement('span');
+        name.textContent = `✓ ${file.name} (${formatBytes(file.size)})`;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'px-2 py-1 rounded hover:bg-white font-bold text-slate-600';
+        remove.textContent = '×';
+        remove.disabled = isProcessingData || isProcessingGeo;
+        remove.setAttribute('aria-label', `Видалити ${file.name}`);
+        remove.addEventListener('click', e => {
+          e.stopPropagation();
+          if (isProcessingData || isProcessingGeo) return;
+          files.splice(index, 1);
+          invalidateDataOutputs();
+          renderInputFiles(kind);
+          checkReady();
+        });
+        row.append(name, remove);
+        info.appendChild(row);
+      }
+    }
+
+    function addInputFiles(newFiles, kind) {
+      const target = kind === 'kodifikator' ? fileKodifikatorData : fileOccupationData;
+      let changed = false;
+      const rejected = [];
+      for (const file of newFiles) {
+        if (!/\.(docx|xlsx|xls)$/i.test(file.name)) { rejected.push(file.name); continue; }
+        if (!target.some(f => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified)) {
+          target.push(file);
+          changed = true;
+        }
+      }
+      if (changed) invalidateDataOutputs();
+      renderInputFiles(kind);
+      checkReady();
+      if (rejected.length) alert(`Не додано: ${rejected.join(', ')}. Підтримуються .docx, .xlsx та .xls. Старі .doc збережіть у Word як .docx.`);
+    }
+
+    function checkReady() {
+      btnProcess.disabled = isProcessingData || isProcessingGeo || !fileKodifikatorData.length && !fileOccupationData.length;
+      btnProcess.classList.toggle('ring-2', !btnProcess.disabled);
+    }
+    setupDropzone(dropzoneKodifikator, fileKodifikatorInput, files => addInputFiles(files, 'kodifikator'));
+    setupDropzone(dropzoneOccupation, fileOccupationInput, files => addInputFiles(files, 'occupation'));
+
+    function showImportReports(reports) {
+      importReport.replaceChildren();
+      const title = document.createElement('p');
+      title.className = 'font-semibold';
+      title.textContent = 'Визначені таблиці та колонки';
+      importReport.appendChild(title);
+      for (const report of reports) {
+        const row = document.createElement('p');
+        const columns = Object.entries(report.columns).map(([field, index]) => `${index + 1}: ${PrepareData.columnLabels[field] || field}`).join('; ');
+        const detectedType = report.kind === 'kodifikator' ? 'кодифікатор' : report.kind === 'occupation' ? 'наказ зі статусами' : 'невідома таблиця';
+        row.textContent = `${report.file} → ${report.table} (${detectedType}): ${report.rows.toLocaleString('uk-UA')} рядків. ${columns}${report.inherited ? ' (продовження таблиці)' : ''}${report.warning ? ' — ' + report.warning : ''}`;
+        importReport.appendChild(row);
+      }
+      importReport.classList.remove('hidden');
+    }
+
+    // --- MAIN PROCESSING PIPELINE (MODULE A) ---
+    btnProcess.addEventListener('click', async () => {
+      if (isProcessingData || isProcessingGeo || !fileKodifikatorData.length && !fileOccupationData.length) return;
+      invalidateDataOutputs();
+      isProcessingData = true;
+      checkReady();
+      fileKodifikatorInput.disabled = fileOccupationInput.disabled = true;
+      attachDataJsonInput.disabled = true;
+      btnProcessAllGeo.disabled = true;
+      renderInputFiles('kodifikator');
+      renderInputFiles('occupation');
+      progressContainer.classList.remove('hidden');
+      const setProgress = (percent, label) => {
+        progressBar.style.width = percent + '%';
+        progressPercent.textContent = percent + '%';
+        progressLabel.textContent = label;
+      };
+      try {
+        const kodifikator = [];
+        const occupation = [];
+        const jobs = [...fileKodifikatorData, ...fileOccupationData].filter((file, index, files) =>
+          files.findIndex(other => other.name === file.name && other.size === file.size && other.lastModified === file.lastModified) === index);
+        for (let i = 0; i < jobs.length; i++) {
+          const file = jobs[i];
+          setProgress(Math.round(5 + i / jobs.length * 65), `Читання [${i + 1}/${jobs.length}]: ${file.name}...`);
+          await new Promise(resolve => setTimeout(resolve, 20));
+          let tables;
+          try {
+            tables = await PrepareData.readTables(file, { XLSX: window.XLSX, JSZip: window.JSZip, DOMParser });
+            const normalized = PrepareData.normalizeInputTables(tables, file.name);
+            for (const record of normalized.kodifikator) kodifikator.push(record);
+            for (const record of normalized.occupation) occupation.push(record);
+            importReports.push(...normalized.reports);
+          } catch (error) {
+            throw new Error(error.message.startsWith(file.name + ':') ? error.message : `${file.name}: ${error.message}`);
+          }
+          showImportReports(importReports);
+        }
+        setProgress(75, 'Об’єднання територій, дедуплікація та історія статусів...');
+        await new Promise(resolve => setTimeout(resolve, 20));
+        const result = PrepareData.mergeData(kodifikator, occupation);
+        if (!result.data.length) throw new Error('Не знайдено даних для експорту.');
+        setProgress(90, 'Підготовка об’єднаного Excel та JSON...');
+        await new Promise(resolve => setTimeout(resolve, 20));
+        const workbook = PrepareData.createWorkbook(result, importReports, XLSX);
+        generatedWorkbookBytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array', compression: true });
+        generatedResult = result;
+        generatedDataJson = result.data;
+        document.getElementById('btnDownloadXlsxSecondary').disabled = false;
+        attachJsonLabel.textContent = `✓ Автоматично прив'язано: data.json (${result.data.length.toLocaleString('uk-UA')} об'єктів)`;
+        attachJsonLabel.parentElement.classList.remove('bg-emerald-50', 'text-emerald-800');
+        attachJsonLabel.parentElement.classList.add('bg-emerald-600', 'text-white');
+        statTotalKatottg.textContent = result.data.length.toLocaleString('uk-UA');
+        statTotalOccup.textContent = result.orders.length.toLocaleString('uk-UA');
+        statMatched.textContent = result.matched.toLocaleString('uk-UA');
+        statMultiVersion.textContent = result.multiVersion.toLocaleString('uk-UA');
+        statsPanel.classList.remove('hidden');
+        downloadStatsText.textContent = `${result.data.length.toLocaleString('uk-UA')} територій, ${result.orders.length.toLocaleString('uk-UA')} унікальних записів наказів; прибрано ${result.duplicates.toLocaleString('uk-UA')} повторів. Excel містить дані, об'єднані накази, історію та джерела.${!kodifikator.length ? ' Без кодифікатора: лише території з наказів.' : result.addedFromOrders ? ` Додано ${result.addedFromOrders} територій, відсутніх у кодифікаторі.` : ''}`;
+        downloadSection.classList.remove('hidden');
+        const hub = document.getElementById('hubStatusDataJson');
+        hub.textContent = `✓ JSON / XLSX готові: ${result.data.length.toLocaleString('uk-UA')} об'єктів`;
+        hub.className = 'text-emerald-400 text-[11px] font-semibold';
+        setProgress(100, 'Готово! Оберіть JSON, Excel або ZIP.');
+      } catch (error) {
+        console.error(error);
+        alert('Помилка обробки файлів: ' + error.message);
+        setProgress(0, 'Помилка: ' + error.message);
+      } finally {
+        isProcessingData = false;
+        fileKodifikatorInput.disabled = fileOccupationInput.disabled = false;
+        attachDataJsonInput.disabled = false;
+        btnProcessAllGeo.disabled = false;
+        renderInputFiles('kodifikator');
+        renderInputFiles('occupation');
+        checkReady();
+        lucide.createIcons();
+      }
+    });
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    btnDownloadJson.addEventListener('click', () => {
+      if (generatedDataJson) downloadBlob(new Blob([JSON.stringify(generatedDataJson, null, 2)], { type: 'application/json' }), 'data.json');
+    });
+    btnDownloadXlsx.addEventListener('click', () => {
+      if (generatedWorkbookBytes) downloadBlob(new Blob([generatedWorkbookBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'katottg_merged.xlsx');
+    });
+    document.getElementById('btnDownloadXlsxSecondary').addEventListener('click', () => btnDownloadXlsx.click());
+
+    // --- PREVIEW JSON ---
+    btnPreview.addEventListener('click', () => {
+      if (!generatedDataJson) return;
+      const previewItems = generatedDataJson.slice(0, 3);
+      jsonPreviewContent.textContent = JSON.stringify(previewItems, null, 2);
+      previewModal.classList.remove('hidden');
+    });
+
+    btnClosePreview.addEventListener('click', () => {
+      previewModal.classList.add('hidden');
+    });
+
+    // --- MODULE B: UNIVERSAL GEOJSON BATCH OPTIMIZER & RE-CODER ---
+    function roundCoords(coords, precision = 5) {
+      if (!coords) return coords;
+      if (typeof coords[0] === 'number') {
+        const p = Math.pow(10, precision);
+        return [
+          Math.round(coords[0] * p) / p,
+          Math.round(coords[1] * p) / p
+        ];
+      }
+      return coords.map(c => roundCoords(c, precision));
+    }
+
+    // Recursive directory reader for Drag & Drop folder
+    async function scanFilesFromDataTransfer(dataTransfer) {
+      const files = [];
+      const items = dataTransfer.items;
+      if (!items) {
+        return Array.from(dataTransfer.files || []);
+      }
+
+      const queue = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.webkitGetAsEntry) {
+          const entry = item.webkitGetAsEntry();
+          if (entry) queue.push(entry);
+        } else if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+
+      while (queue.length > 0) {
+        const entry = queue.shift();
+        if (entry.isFile) {
+          if (entry.name.toLowerCase().endsWith('.geojson') || entry.name.toLowerCase().endsWith('.json')) {
+            const file = await new Promise((res, rej) => entry.file(res, rej));
+            files.push(file);
+          }
+        } else if (entry.isDirectory) {
+          const dirReader = entry.createReader();
+          const readEntries = () => new Promise((res, rej) => dirReader.readEntries(res, rej));
+          let dirEntries;
+          do {
+            dirEntries = await readEntries();
+            for (const sub of dirEntries) {
+              queue.push(sub);
+            }
+          } while (dirEntries.length > 0);
+        }
+      }
+      return files;
+    }
+
+    // Attach external data.json
+    const attachDataJsonInput = document.getElementById('attachDataJsonInput');
+    const attachJsonLabel = document.getElementById('attachJsonLabel');
+
+    if (attachDataJsonInput) {
+      attachDataJsonInput.addEventListener('change', async (e) => {
+        if (e.target.files.length) {
+          const file = e.target.files[0];
+          try {
+            const text = await readFileAsText(file);
+            const parsed = JSON.parse(text);
+            if (!Array.isArray(parsed) || !parsed.length || !parsed.every(item => item && typeof item.katottg === 'string' && Number.isInteger(item.admin_level))) {
+              throw new Error('Потрібен масив об’єктів data.json з полями katottg та admin_level.');
+            }
+            generatedDataJson = parsed;
+            generatedResult = null;
+            generatedWorkbookBytes = null;
+            document.getElementById('btnDownloadXlsxSecondary').disabled = true;
+            downloadSection.classList.add('hidden');
+            previewModal.classList.add('hidden');
+            statsPanel.classList.add('hidden');
+            progressContainer.classList.add('hidden');
+            document.getElementById('hubStatusDataJson').textContent = `✓ Прив'язано JSON: ${parsed.length.toLocaleString('uk-UA')} об'єктів`;
+            invalidateGeoOutputs();
+            attachJsonLabel.textContent = `✓ Прив'язано: ${file.name} (${generatedDataJson.length.toLocaleString('uk-UA')} об'єктів)`;
+            attachJsonLabel.parentElement.classList.remove('bg-emerald-50', 'text-emerald-800');
+            attachJsonLabel.parentElement.classList.add('bg-emerald-600', 'text-white');
+            lucide.createIcons();
+          } catch (err) {
+            alert('Помилка читання JSON: ' + err.message);
+          }
+        }
+      });
+    }
+
+    folderGeoInput.addEventListener('change', (e) => {
+      addGeoFiles(Array.from(e.target.files));
+    });
+
+    filesGeoInput.addEventListener('change', (e) => {
+      addGeoFiles(Array.from(e.target.files));
+    });
+
+    dropzoneGeoBatch.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzoneGeoBatch.classList.add('dragover');
+    });
+
+    dropzoneGeoBatch.addEventListener('dragleave', () => {
+      dropzoneGeoBatch.classList.remove('dragover');
+    });
+
+    dropzoneGeoBatch.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dropzoneGeoBatch.classList.remove('dragover');
+      try {
+        const droppedFiles = await scanFilesFromDataTransfer(e.dataTransfer);
+        addGeoFiles(droppedFiles);
+      } catch (err) {
+        console.error('Помилка читання папки:', err);
+        if (e.dataTransfer.files) {
+          addGeoFiles(Array.from(e.dataTransfer.files));
+        }
+      }
+    });
+
+    // Detect level from file name
+    function detectFileLevel(name) {
+      const lower = name.toLowerCase();
+      if (lower.includes('admin0')) return 0;
+      if (lower.includes('admin1')) return 1;
+      if (lower.includes('admin2')) return 2;
+      if (lower.includes('admin3')) return 3;
+      if (lower.includes('admin4')) return 4;
+      if (lower.includes('capitals')) return 'capitals';
+      if (lower.includes('lines')) return 'lines';
+      if (lower.includes('points')) return 'points';
+      return 'unknown';
+    }
+
+    // Add files to list & render table
+    function addGeoFiles(newFiles) {
+      const geoOnly = newFiles.filter(f => f.name.toLowerCase().endsWith('.geojson') || f.name.toLowerCase().endsWith('.json'));
+      if (geoOnly.length === 0) {
+        alert('У вибраній папці/файлах не знайдено GeoJSON (.geojson або .json)!');
+        return;
+      }
+
+      for (const file of geoOnly) {
+        if (!batchGeoFiles.some(item => item.name === file.name && item.origSize === file.size)) {
+          batchGeoFiles.push({
+            id: 'geo_' + Math.random().toString(36).substr(2, 9),
+            file: file,
+            name: file.name,
+            outName: getOutputFilename(file.name),
+            level: detectFileLevel(file.name),
+            origSize: file.size,
+            optSize: 0,
+            optData: null,
+            matchedCount: 0,
+            status: 'pending',
+            error: null,
+            regionalSettlements: null
+          });
+        }
+      }
+
+      batchGeoFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+      renderGeoTable();
+      geoBatchDownloadSection.classList.add('hidden');
+    }
+
+    function renderGeoTable() {
+      if (batchGeoFiles.length === 0) {
+        geoFilesListContainer.classList.add('hidden');
+        return;
+      }
+
+      geoFilesListContainer.classList.remove('hidden');
+      geoFilesCount.textContent = batchGeoFiles.length;
+
+      const totalBytes = batchGeoFiles.reduce((acc, f) => acc + f.origSize, 0);
+      geoTotalOrigSize.textContent = formatBytes(totalBytes);
+
+      geoFilesTableBody.innerHTML = '';
+      batchGeoFiles.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.id = `row_${item.id}`;
+        tr.className = index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+
+        let statusBadge = '';
+        if (item.status === 'pending') {
+          statusBadge = '<span class="px-2 py-0.5 rounded-full text-[11px] bg-slate-100 text-slate-600 font-medium">Очікує</span>';
+        } else if (item.status === 'processing') {
+          statusBadge = '<span class="px-2 py-0.5 rounded-full text-[11px] bg-amber-100 text-amber-800 font-medium animate-pulse">Перекодування...</span>';
+        } else if (item.status === 'done') {
+          statusBadge = '<span class="px-2 py-0.5 rounded-full text-[11px] bg-emerald-100 text-emerald-800 font-bold">✓ Готово</span>';
+        } else {
+          statusBadge = `<span class="px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800 font-medium" title="${item.error || ''}">Помилка</span>`;
+        }
+
+        const optDisplay = item.optSize ? formatBytes(item.optSize) : '—';
+        const matchedDisplay = item.status === 'done' ? (item.matchedCount > 0 ? `<span class="text-emerald-700 font-semibold">${item.matchedCount.toLocaleString('uk-UA')}</span>` : '—') : '—';
+
+        let downloadAction = '—';
+        if (item.status === 'done' && item.optData) {
+          downloadAction = `<button onclick="downloadSingleGeo('${item.id}')" class="text-indigo-600 hover:text-indigo-900 font-semibold underline text-xs">Завантажити (${item.outName})</button>`;
+        }
+
+        tr.innerHTML = `
+          <td class="px-4 py-2.5 font-medium text-slate-800 flex items-center space-x-1.5">
+            <i data-lucide="file-code" class="w-3.5 h-3.5 text-slate-400"></i>
+            <span>${item.name}</span>
+          </td>
+          <td class="px-4 py-2.5 font-mono text-indigo-700 font-semibold text-xs">${item.outName}</td>
+          <td class="px-4 py-2.5 text-right font-mono text-slate-600">${formatBytes(item.origSize)}</td>
+          <td class="px-4 py-2.5 text-right font-mono font-semibold text-emerald-600" id="opt_${item.id}">${optDisplay}</td>
+          <td class="px-4 py-2.5 text-center font-mono text-xs" id="matched_${item.id}">${matchedDisplay}</td>
+          <td class="px-4 py-2.5 text-center" id="status_${item.id}">${statusBadge}</td>
+          <td class="px-4 py-2.5 text-center" id="action_${item.id}">${downloadAction}</td>
+        `;
+        geoFilesTableBody.appendChild(tr);
+      });
+
+      lucide.createIcons();
+    }
+
+    // Process all files in batch sequentially
+    btnProcessAllGeo.addEventListener('click', async () => {
+      if (batchGeoFiles.length === 0 || isProcessingData || isProcessingGeo) return;
+
+      isProcessingGeo = true;
+      checkReady();
+      fileKodifikatorInput.disabled = fileOccupationInput.disabled = true;
+      attachDataJsonInput.disabled = true;
+      renderInputFiles('kodifikator');
+      renderInputFiles('occupation');
+      btnProcessAllGeo.disabled = true;
+      geoBatchProgressContainer.classList.remove('hidden');
+      geoBatchDownloadSection.classList.add('hidden');
+
+      const total = batchGeoFiles.length;
+      let totalOrig = 0;
+      let totalOpt = 0;
+
+      // Build fast lookup indexes from generatedDataJson
+      let byPcode = new Map();
+      let byNameAndLevel = new Map();
+      let byKey5 = new Map();
+
+      if (generatedDataJson && Array.isArray(generatedDataJson)) {
+        for (const it of generatedDataJson) {
+          if (it.pcode_prefix) byPcode.set(it.pcode_prefix, it);
+          if (it.name_ua && it.admin_level) {
+            byNameAndLevel.set(`${it.admin_level}_${it.name_ua.trim().toLowerCase()}`, it);
+          }
+          if (it.katottg_key5) byKey5.set(it.katottg_key5, it);
+        }
+      }
+
+      const preserveProps = chkPreserveOriginalProps.checked;
+      const injectProps = chkInjectKatottg.checked;
+      const doRegionalSplit = chkRegionalSplit.checked;
+
+      for (let i = 0; i < total; i++) {
+        const item = batchGeoFiles[i];
+        item.status = 'processing';
+        item.outName = getOutputFilename(item.name);
+
+        // Progress UI
+        const percent = Math.round((i / total) * 100);
+        geoBatchProgressBar.style.width = percent + '%';
+        geoBatchProgressPercent.textContent = percent + '%';
+        geoBatchProgressLabel.textContent = `Обробка файлу [${i + 1}/${total}]: ${item.name} → ${item.outName}...`;
+
+        const statusEl = document.getElementById(`status_${item.id}`);
+        if (statusEl) statusEl.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[11px] bg-amber-100 text-amber-800 font-medium animate-pulse">Перекодування...</span>';
+
+        await new Promise(r => setTimeout(r, 40));
+
+        try {
+          const text = await readFileAsText(item.file);
+          const geojson = JSON.parse(text);
+
+          let matchedFeatures = 0;
+          const regionalGroups = {};
+
+          if (geojson.features && Array.isArray(geojson.features)) {
+            for (let f of geojson.features) {
+              // 1. Round coordinates (5 decimals ~1.1 m)
+              if (f.geometry && f.geometry.coordinates) {
+                f.geometry.coordinates = roundCoords(f.geometry.coordinates, 5);
+              }
+
+              // 2. Properties
+              if (f.properties) {
+                const p = f.properties;
+
+                // Remove nulls to save size
+                for (let k of Object.keys(p)) {
+                  if (p[k] === null) delete p[k];
+                }
+
+                // Match with KATOTTG
+                let matched = null;
+                if (injectProps && generatedDataJson) {
+                  if (item.level === 1) {
+                    matched = byPcode.get(p.adm1_pcode) || byNameAndLevel.get(`1_${(p.adm1_name1 || '').trim().toLowerCase()}`);
+                  } else if (item.level === 2) {
+                    matched = byPcode.get(p.adm2_pcode) || byNameAndLevel.get(`2_${(p.adm2_name1 || '').trim().toLowerCase()}`);
+                  } else if (item.level === 3) {
+                    matched = byPcode.get(p.adm3_pcode) || byNameAndLevel.get(`3_${(p.adm3_name1 || '').trim().toLowerCase()}`);
+                  } else if (item.level === 4) {
+                    matched = byPcode.get(p.adm4_pcode) || byNameAndLevel.get(`4_${(p.adm4_name1 || '').trim().toLowerCase()}`);
+                  } else if (item.level === 'capitals' || item.level === 'points') {
+                    const pcode = p.loc_pcode || p.adm4_pcode || p.adm3_pcode || p.adm2_pcode || p.adm1_pcode;
+                    if (pcode) matched = byPcode.get(pcode);
+                  }
+
+                  if (matched) {
+                    matchedFeatures++;
+                    // Inject unified standardized KATOTTG fields
+                    p.katottg = matched.katottg;
+                    p.katottg_key5 = matched.katottg_key5;
+                    p.admin_level = matched.admin_level;
+                    p.admin_level_name = matched.admin_level_name;
+                    p.category = matched.category;
+                    p.category_name = matched.category_name;
+                    p.name_ua = matched.name_ua;
+                    if (matched.parent_katottg) p.parent_katottg = matched.parent_katottg;
+                    if (matched.region_name) p.region_name = matched.region_name;
+                    if (matched.raion_name) p.raion_name = matched.raion_name;
+                    if (matched.hromada_name) p.hromada_name = matched.hromada_name;
+                    p.status = matched.status;
+                    p.is_occupied = matched.is_occupied;
+                    if (matched.date_start) p.date_start = matched.date_start;
+                    if (matched.date_end) p.date_end = matched.date_end;
+                    if (matched.systems_active) p.systems_active = matched.systems_active;
+                    if (matched.total_versions) p.total_versions = matched.total_versions;
+                    if (matched.settlements_total !== undefined) {
+                      p.settlements_total = matched.settlements_total;
+                      p.settlements_occupied = matched.settlements_occupied;
+                    }
+                  }
+                }
+
+                // If Level 4 and regional split enabled, collect per oblast
+                if (item.level === 4 && doRegionalSplit) {
+                  const regCode = p.adm1_pcode || 'UNKNOWN';
+                  const regName = p.adm1_name1 || 'Інші';
+                  if (!regionalGroups[regCode]) {
+                    regionalGroups[regCode] = { regName: regName, features: [] };
+                  }
+                  regionalGroups[regCode].features.push(f);
+                }
+              }
+            }
+          }
+
+          const optString = JSON.stringify(geojson);
+          item.optData = optString;
+          item.optSize = new Blob([optString]).size;
+          item.matchedCount = matchedFeatures;
+          item.status = 'done';
+
+          if (item.level === 4 && doRegionalSplit && Object.keys(regionalGroups).length > 0) {
+            item.regionalSettlements = regionalGroups;
+          }
+
+          totalOrig += item.origSize;
+          totalOpt += item.optSize;
+
+          // Update UI
+          const optEl = document.getElementById(`opt_${item.id}`);
+          const matchedEl = document.getElementById(`matched_${item.id}`);
+          const actEl = document.getElementById(`action_${item.id}`);
+          if (optEl) optEl.textContent = formatBytes(item.optSize);
+          if (matchedEl) matchedEl.innerHTML = matchedFeatures > 0 ? `<span class="text-emerald-700 font-semibold">${matchedFeatures.toLocaleString('uk-UA')}</span>` : '—';
+          if (statusEl) statusEl.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[11px] bg-emerald-100 text-emerald-800 font-bold">✓ Готово</span>';
+          if (actEl) actEl.innerHTML = `<button onclick="downloadSingleGeo('${item.id}')" class="text-indigo-600 hover:text-indigo-900 font-semibold underline text-xs">Завантажити</button>`;
+
+        } catch (err) {
+          console.error(`Помилка обробки ${item.name}:`, err);
+          item.status = 'error';
+          item.error = err.message;
+          if (statusEl) statusEl.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[11px] bg-rose-100 text-rose-800 font-medium">Помилка</span>';
+        }
+      }
+
+      // Finish batch
+      geoBatchProgressBar.style.width = '100%';
+      geoBatchProgressPercent.textContent = '100%';
+      geoBatchProgressLabel.textContent = 'Всі файли успішно перекодовано та структуровано!';
+
+      summaryOrig.textContent = formatBytes(totalOrig);
+      summaryOpt.textContent = formatBytes(totalOpt);
+      const overallSaved = totalOrig > 0 ? Math.round((1 - totalOpt / totalOrig) * 100) : 0;
+      summarySaved.textContent = `${overallSaved}% (${formatBytes(totalOrig - totalOpt)})`;
+
+      geoBatchStructureText.textContent = `Структура файлів готова для кінцевого сервісу: обрана схема (${document.querySelector('input[name="namingScheme"]:checked')?.value}), збережено всі вихідні властивості, додано єдиний набір КАТОТТГ.`;
+
+      geoBatchDownloadSection.classList.remove('hidden');
+      isProcessingGeo = false;
+      fileKodifikatorInput.disabled = fileOccupationInput.disabled = false;
+      attachDataJsonInput.disabled = false;
+      renderInputFiles('kodifikator');
+      renderInputFiles('occupation');
+      checkReady();
+      btnProcessAllGeo.disabled = false;
+      lucide.createIcons();
+    });
+
+    function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
+    }
+
+    // Download a single optimized GeoJSON file
+    window.downloadSingleGeo = function(id) {
+      const item = batchGeoFiles.find(f => f.id === id);
+      if (!item || !item.optData) return;
+
+      const outName = item.outName || getOutputFilename(item.name);
+      const blob = new Blob([item.optData], { type: 'application/geo+json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = outName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+
+    // Download structured ZIP archive
+    btnDownloadAllGeoZip.addEventListener('click', async () => {
+      const readyFiles = batchGeoFiles.filter(f => f.status === 'done' && f.optData);
+      if (readyFiles.length === 0) {
+        alert('Немає готових файлів для пакування!');
+        return;
+      }
+
+      btnDownloadAllGeoZip.disabled = true;
+      const originalText = btnDownloadAllGeoZip.innerHTML;
+      btnDownloadAllGeoZip.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 mr-2 animate-spin"></i> Створення ZIP-архіву структури...';
+      lucide.createIcons();
+
+      try {
+        const zip = new JSZip();
+        const useLevelFolders = chkLevelFolders.checked;
+        const doRegionalSplit = chkRegionalSplit.checked;
+        const doManifest = chkManifest.checked;
+
+        const manifest = {
+          title: "Геодані адміністративно-територіального устрою України та КАТОТТГ",
+          version: "1.0",
+          precision_decimals: 5,
+          approx_accuracy: "~1.1 meters",
+          encoding: "UTF-8",
+          files: {},
+          regional_settlements: {}
+        };
+
+        for (const item of readyFiles) {
+          const outName = item.outName || getOutputFilename(item.name);
+
+          // Path in zip
+          let zipPath = outName;
+          if (useLevelFolders) {
+            let folder = 'auxiliary';
+            if (item.level === 0) folder = '0_country';
+            else if (item.level === 1) folder = '1_oblasts';
+            else if (item.level === 2) folder = '2_raions';
+            else if (item.level === 3) folder = '3_hromadas';
+            else if (item.level === 4) folder = '4_settlements';
+            zipPath = `${folder}/${outName}`;
+          }
+
+          zip.file(zipPath, item.optData);
+
+          manifest.files[outName] = {
+            level: item.level,
+            path: zipPath,
+            matched_katottg: item.matchedCount,
+            size_bytes: item.optSize
+          };
+
+          // If Level 4 has regional split
+          if (item.level === 4 && doRegionalSplit && item.regionalSettlements) {
+            for (const [regCode, regData] of Object.entries(item.regionalSettlements)) {
+              const regGeojson = {
+                type: "FeatureCollection",
+                name: `settlements_${regCode}`,
+                properties: {
+                  region_pcode: regCode,
+                  region_name: regData.regName,
+                  features_count: regData.features.length
+                },
+                features: regData.features
+              };
+              const regFilename = `settlements_by_region/${regCode}_settlements.geojson`;
+              const regJsonStr = JSON.stringify(regGeojson);
+              zip.file(regFilename, regJsonStr);
+
+              manifest.regional_settlements[regCode] = {
+                region_name: regData.regName,
+                features_count: regData.features.length,
+                file: regFilename
+              };
+            }
+          }
+        }
+
+        // Include data.json if generated or loaded
+        if (generatedDataJson) {
+          zip.file("data.json", JSON.stringify(generatedDataJson));
+        }
+        if (generatedWorkbookBytes) zip.file('katottg_merged.xlsx', generatedWorkbookBytes);
+
+        // Add manifest.json if requested
+        if (doManifest) {
+          zip.file("manifest.json", JSON.stringify(manifest, null, 2));
+        }
+
+        const zipBlob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
+
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ukr_katottg_geodata_structure.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert('Помилка створення ZIP: ' + err.message);
+      } finally {
+        btnDownloadAllGeoZip.disabled = false;
+        btnDownloadAllGeoZip.innerHTML = originalText;
+        lucide.createIcons();
+      }
+    });
+
+    // --- MASTER PACKAGER: DOWNLOAD ALL FILES TOGETHER ---
+    async function downloadAllFilesTogether(triggerBtn) {
+      const origHtml = triggerBtn.innerHTML;
+      triggerBtn.disabled = true;
+      triggerBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 mr-2 animate-spin"></i> Створення повного архіву...';
+      lucide.createIcons();
+
+      try {
+        let dataJsonToPack = generatedDataJson;
+        if (!dataJsonToPack) {
+          // Attempt to fetch existing data_files/data.json if not freshly generated in Module A
+          try {
+            const resp = await fetch('../data_files/data.json');
+            if (resp.ok) {
+              dataJsonToPack = await resp.json();
+            }
+          } catch (e) {
+            console.warn('Could not fetch ../data_files/data.json', e);
+          }
+        }
+
+        if (!dataJsonToPack) {
+          alert('Будь ласка, спочатку згенеруйте data.json у Модулі А (або запустіть сторінку через локальний веб-сервер, щоб підтягнути наявні файли)!');
+          triggerBtn.disabled = false;
+          triggerBtn.innerHTML = origHtml;
+          lucide.createIcons();
+          return;
+        }
+
+        const zip = new JSZip();
+
+        // 1. Pack data.json
+        zip.file('data.json', JSON.stringify(dataJsonToPack, null, 2));
+
+        const manifestFiles = {
+          'data.json': {
+            name_ua: 'База даних КАТОТТГ та статусів',
+            total_records: dataJsonToPack.length,
+            path: './data_files/data.json'
+          }
+        };
+        if (generatedWorkbookBytes) {
+          zip.file('katottg_merged.xlsx', generatedWorkbookBytes);
+          manifestFiles['katottg_merged.xlsx'] = {
+            name_ua: 'Об’єднані дані, накази та історія статусів',
+            total_records: generatedResult.data.length,
+            path: './data_files/katottg_merged.xlsx'
+          };
+        }
+
+        // 2. Pack GeoJSON files
+        const readyGeoFiles = batchGeoFiles.filter(f => f.status === 'done' && f.optData);
+
+        if (readyGeoFiles.length > 0) {
+          // Use in-memory processed files from Module B
+          for (const item of readyGeoFiles) {
+            const outName = item.outName || getOutputFilename(item.name);
+            zip.file(outName, item.optData);
+            manifestFiles[outName] = {
+              level: item.level,
+              path: `./data_files/${outName}`,
+              matched_katottg: item.matchedCount,
+              size_bytes: item.optSize
+            };
+          }
+        } else {
+          // Fetch default geojson files from ../data_files/
+          const defaultGeoFiles = [
+            'ukr_admin0.geojson',
+            'ukr_admin1.geojson',
+            'ukr_admin2.geojson',
+            'ukr_admin3.geojson',
+            'ukr_admin4.geojson',
+            'ukr_admincapitals.geojson',
+            'ukr_adminlines.geojson',
+            'ukr_adminpoints.geojson'
+          ];
+
+          let fetchedCount = 0;
+          for (const gName of defaultGeoFiles) {
+            try {
+              const resp = await fetch(`../data_files/${gName}`);
+              if (resp.ok) {
+                const blob = await resp.blob();
+                zip.file(gName, blob);
+                manifestFiles[gName] = {
+                  path: `./data_files/${gName}`,
+                  size_bytes: blob.size
+                };
+                fetchedCount++;
+              }
+            } catch (e) {
+              console.warn(`Could not fetch ../data_files/${gName}`, e);
+            }
+          }
+
+          if (fetchedCount === 0) {
+            console.warn('Geo files could not be fetched automatically. Packaging data.json and manifest.');
+          }
+        }
+
+        // 3. Pack manifest.json
+        const manifest = {
+          title: "Повний набір геоданих та КАТОТТГ України",
+          version: "1.0",
+          updated_at: new Date().toISOString().slice(0, 10),
+          precision_decimals: 5,
+          approx_accuracy: "~1.1 meters",
+          encoding: "UTF-8",
+          description: "Повний комплект data_files для кінцевої системи: актуальна база data.json, всі шари геоданих та маніфест структури.",
+          database: {
+            file: "data.json",
+            total_records: dataJsonToPack.length,
+            path: "./data_files/data.json"
+          },
+          files: manifestFiles
+        };
+
+        zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+
+        // 4. Generate & trigger ZIP download
+        const zipBlob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
+
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'katottg_data_files_complete.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+      } catch (err) {
+        console.error(err);
+        alert('Помилка створення повного архіву: ' + err.message);
+      } finally {
+        triggerBtn.disabled = false;
+        triggerBtn.innerHTML = origHtml;
+        lucide.createIcons();
+      }
+    }
+
+    // Connect all "Download All" buttons
+    const btnDownloadAllMasterZip = document.getElementById('btnDownloadAllMasterZip');
+    if (btnDownloadAllMasterZip) {
+      btnDownloadAllMasterZip.addEventListener('click', () => downloadAllFilesTogether(btnDownloadAllMasterZip));
+    }
+
+    const btnDownloadAllFromModuleA = document.getElementById('btnDownloadAllFromModuleA');
+    if (btnDownloadAllFromModuleA) {
+      btnDownloadAllFromModuleA.addEventListener('click', () => downloadAllFilesTogether(btnDownloadAllFromModuleA));
+    }
+
+    const btnDownloadAllFromModuleB = document.getElementById('btnDownloadAllFromModuleB');
+    if (btnDownloadAllFromModuleB) {
+      btnDownloadAllFromModuleB.addEventListener('click', () => downloadAllFilesTogether(btnDownloadAllFromModuleB));
+    }
+
+    // Connect secondary individual buttons
+    const btnDownloadJsonSecondary = document.getElementById('btnDownloadJsonSecondary');
+    if (btnDownloadJsonSecondary) {
+      btnDownloadJsonSecondary.addEventListener('click', () => {
+        btnDownloadJson.click();
+      });
+    }
+
+    const btnDownloadGeoOnly = document.getElementById('btnDownloadGeoOnly');
+    if (btnDownloadGeoOnly) {
+      btnDownloadGeoOnly.addEventListener('click', () => {
+        btnDownloadAllGeoZip.click();
+      });
+    }
+
+  </script>
+</body>
+</html>
