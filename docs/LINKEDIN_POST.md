@@ -1,27 +1,28 @@
 # LinkedIn draft — English
 
-From fragmented Word tables to a reusable administrative dataset.
+From Word and Excel tables to structured data you can inspect and reuse.
 
-I'm sharing **KATOTTG Data Toolkit**, a project focused on preparing Ukraine's administrative and territorial-status data — and making the result easier to inspect.
+I've published **KATOTTG Data Toolkit**, a browser-based tool for preparing and exploring Ukraine's administrative and territorial-status data.
 
-The workflow brings together three types of input:
+The main focus is the preparation workflow:
 
-• The KATOTTG codifier: administrative codes, names and parent relationships.
-• Official territorial-status tables: occupation or hostilities categories, dates and information-system availability.
-• Administrative-boundary GeoJSON: the geographic layer used to connect the prepared records to a map.
+• Import several Word or Excel files in one run.
+• Detect tables and columns, handle merged cells and normalize records.
+• Join records by full KATOTTG code, merge duplicates and retain source references and status histories.
+• Export JSON or a merged Excel workbook, then enrich compatible GeoJSON with the prepared records.
 
-The preparation tool reads multiple Word and Excel files, detects tables and columns, handles merged cells, joins records by full KATOTTG code, merges duplicates and preserves source references and status histories. The result can be downloaded as JSON, a merged Excel workbook or a package with enriched GeoJSON.
+The inputs have distinct roles: Ukraine's official administrative codifier (KATOTTG) provides identifiers and hierarchy; territorial-status documents under Order No. 376 provide occupation/hostilities categories, dates and information-system availability; administrative boundaries provide the geographic layer. HDX Ukraine COD-AB is linked as a boundary source option.
 
-One detail matters: summaries for regions, districts and communities are calculated from their level-4 records. They show exact affected/total counts and distinguish fully controlled, mixed and fully affected territories. The same summary is used across the hierarchy, object cards and map.
+For regions, districts and communities, summaries use settlement-level records and show exact affected/total counts. The hierarchy, object cards and map use the same summary, while source status history remains separate.
 
-The related service, **“ATU objects with occupation-status data,”** makes it possible to browse subordinate objects, find an identifier or status, filter results and switch between table, hierarchy and map views.
+The working service, **“ATU objects with occupation-status data,”** lets users search for names or identifiers, browse subordinate objects, filter by status and switch between table, hierarchy and map views.
 
-Existing service: https://ontonew.snman.science/katottg/index.html
-Repository: https://github.com/GODEvgenius/katottg-data-toolkit
+Try the service: https://ontonew.snman.science/katottg/index.html
+Repository: https://github.com/ye-shapovalov/katottg-data-toolkit
 
-The public repository contains the software and documentation, without source datasets or geographic records. Users supply their own inputs. Source references include the official KATOTTG publication page, the territorial-status list under Order No. 376, and HDX Ukraine COD-AB as an administrative-boundary source option.
+The public repository contains software and source documentation only. Users provide their own datasets and record the source editions and geographic attribution.
 
-I'd welcome feedback on the import workflow, source tracking and ways to make these datasets easier to reuse.
+I'd welcome feedback from people working with administrative data, GIS and document-based data preparation.
 
 #OpenData #DataPreparation #DataEngineering #GIS #Ukraine
 
@@ -29,8 +30,9 @@ I'd welcome feedback on the import workflow, source tracking and ways to make th
 
 ## Publication notes
 
-- Repository: https://github.com/GODEvgenius/katottg-data-toolkit
+- Repository: https://github.com/ye-shapovalov/katottg-data-toolkit
 - Attach `docs/assets/linkedin-data-pipeline.png`.
+- Source references: [official KATOTTG codifier](https://mininfra.gov.ua/diialnist/rozvytok-mistsevoho-samovriaduvannia/kodyfikator-administratyvno-terytorialnykh-odynyts-ta-terytorialnykh-hromad), [territorial-status list under Order No. 376](https://zakon.rada.gov.ua/laws/show/z0380-25), and [HDX Ukraine COD-AB boundary source option](https://data.humdata.org/dataset/cod-ab-ukr).
 - Suggested image alt text: “KATOTTG Data Toolkit pipeline: Word and Excel source tables become structured JSON and Excel, are joined with administrative GeoJSON, and can be inspected in table, hierarchy and map views.”
 - The repository contains no datasets. Source-document editions, status dates, geometry reference dates and package dates should be recorded separately when preparing data.
 - This is a draft for review; no LinkedIn post has been published.
