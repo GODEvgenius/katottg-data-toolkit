@@ -1,0 +1,13 @@
+# Local input documents and historical copies are not release artifacts.
+/internal files/
+/data_files/
+/tools/old/
+/.publish/
+/node_modules/
+/.env
+/.env.*
+*.log
+*.tmp
+__pycache__/
+.DS_Store
+Thumbs.db

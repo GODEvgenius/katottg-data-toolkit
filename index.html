@@ -1,0 +1,2323 @@
+<!DOCTYPE html>
+<html lang="uk" class="h-full">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Реєстр КАТОТТГ та статусів окупації України</title>
+  <meta name="description"
+    content="Офіційний реєстр КАТОТТГ — швидка перевірка статусів окупації та бойових дій для населених пунктів, громад та районів України.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700&display=swap"
+    rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'], display: ['Outfit', 'sans-serif'] } } }
+    }
+  </script>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="tools/status_summary.js"></script>
+  <script src="tools/registry_url_state.js"></script>
+
+  <style>
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(226, 232, 240, 0.85);
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+      z-index: 10;
+      background-color: #0f172a;
+    }
+
+    #objCardMap {
+      height: 100%;
+      width: 100%;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    .geo-sep::before {
+      content: '›';
+      color: #94a3b8;
+      font-weight: 700;
+      margin: 0 4px;
+    }
+
+    .hier-card {
+      transition: all 0.15s ease;
+    }
+
+    .hier-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    #hierGrid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 315px), 1fr));
+      grid-auto-rows: 1fr;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    #hierGrid.hidden {
+      display: none;
+    }
+
+    .hier-card {
+      min-width: 0;
+    }
+
+    .hier-card-name {
+      overflow-wrap: anywhere;
+    }
+
+    .hier-status > span {
+      max-width: 100%;
+      white-space: normal;
+    }
+
+    .hier-actions button {
+      min-height: 28px;
+      white-space: nowrap;
+    }
+
+    .hier-actions button:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+    }
+
+    #filterModeGroup button { white-space: nowrap; }
+    #advancedFilterPanel { max-height: 40vh; overflow-y: auto; }
+    #advancedFilterPanel select { max-width: 100%; }
+    #filterToolbar { min-width: 0; }
+    @media (max-width: 639px) {
+      #filterModeGroup button { padding-left: 8px; padding-right: 8px; }
+      #sharedSearchBox { flex-basis: 100%; }
+    }
+
+    /* Object card modal animation */
+    #objectCardModal {
+      transition: opacity 0.2s ease;
+    }
+
+    #objectCardModal.entering {
+      opacity: 0;
+    }
+
+    #objectCardInner {
+      transition: transform 0.2s ease;
+    }
+
+    #objectCardModal.entering #objectCardInner {
+      transform: scale(0.97);
+    }
+  </style>
+</head>
+
+<body class="h-full bg-slate-50 text-slate-800 antialiased overflow-hidden flex flex-col font-sans">
+
+  <!-- TOP HEADER -->
+  <header class="bg-white border-b border-slate-200 px-4 sm:px-6 z-30 shadow-xs flex-shrink-0">
+    <div class="min-h-[60px] py-2 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center space-x-3 min-w-0">
+        <div
+          class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-sm">
+          <i data-lucide="shield-alert" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h1
+            class="font-display font-bold text-base sm:text-lg text-slate-900 leading-none tracking-tight flex items-center gap-2">
+            Реєстр КАТОТТГ та статусів окупації
+            <span
+              class="text-[10px] font-sans font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Офіційні
+              дані</span>
+          </h1>
+          <div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+            <p class="hidden sm:block">Швидка перевірка населених пунктів та громад України</p>
+            <p id="dataUpdateInfo" class="hidden" title="Дата оновлення комплекту КАТОТТГ та геоданих, зазначена в паспорті даних.">Комплект оновлено: <time id="dataUpdatedAt" class="font-medium text-slate-600"></time></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW SWITCHER -->
+      <div class="flex items-center p-1 bg-slate-100 border border-slate-200 rounded-xl">
+        <button id="btnSwitchTable" aria-label="Таблиця"
+          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs bg-white text-blue-700">
+          <i data-lucide="table" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Таблиця</span>
+        </button>
+        <button id="btnSwitchHierarchy" aria-label="Ієрархія"
+          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all">
+          <i data-lucide="folder-tree" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Ієрархія</span>
+        </button>
+        <button id="btnSwitchMap" aria-label="Карта"
+          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all">
+          <i data-lucide="map" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Карта</span>
+        </button>
+      </div>
+
+      <div class="flex items-center space-x-2 flex-shrink-0">
+        <a href="tools/prepare_data.html" title="Підготовка даних КАТОТТГ"
+          class="inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors shadow-xs">
+          <i data-lucide="cog" class="w-3.5 h-3.5 text-slate-500"></i>
+          <span class="hidden sm:inline">Підготовка даних</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- FILTER TOOLBAR -->
+  <section id="filterToolbar" aria-label="Пошук і фільтри" class="bg-white border-b border-slate-200 px-4 sm:px-6 z-20 flex-shrink-0 shadow-2xs">
+
+    <!-- ROW 1: Quick filters -->
+    <div class="py-2 flex flex-wrap items-center gap-2">
+      <div id="sharedSearchBox" class="relative flex-1 min-w-[220px]">
+        <label for="filterSearchInput" class="sr-only">Пошук за назвою або кодом КАТОТТГ</label>
+        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        <input type="text" id="filterSearchInput" placeholder="Пошук за назвою або кодом..."
+          class="w-full pl-9 pr-8 py-1.5 text-xs rounded-xl bg-slate-50 border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all" autocomplete="off">
+        <button id="btnClearSearchInput"
+            class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Очистити пошук">
+          <i data-lucide="x" class="w-3.5 h-3.5"></i>
+        </button>
+        <div id="mapSearchResults" class="hidden absolute top-full left-0 right-0 mt-1 max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white shadow-lg z-30" aria-label="Результати пошуку на карті"></div>
+      </div>
+
+      <!-- 3-WAY FILTER MODE SWITCHER -->
+      <div
+        class="inline-flex items-center p-0.5 bg-slate-100 border border-slate-300 rounded-xl text-xs font-semibold max-w-full overflow-x-auto shadow-2xs"
+        id="filterModeGroup">
+        <button type="button" id="btnFilterModeAll" title="Показати всі об'єкти України без обмежень"
+          class="px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 bg-white text-blue-700 font-bold shadow-xs border border-slate-200/80">
+          <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+          <span>Усі</span>
+          <span id="badgeCountAll" class="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-800">31
+            744</span>
+        </button>
+        <button type="button" id="btnFilterModeOccupied"
+          title="Показати тільки тимчасово окуповані території та зони бойових дій"
+          class="px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 text-slate-600 hover:text-slate-900 font-medium">
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+          <span id="filterOccupiedLabel">ТОТ / дії</span>
+          <span id="badgeCountOccupied" class="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-100 text-rose-800">10
+            817</span>
+        </button>
+        <button type="button" id="btnFilterModeSafe" title="Показати тільки території під контролем України"
+          class="px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 text-slate-600 hover:text-slate-900 font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span id="filterSafeLabel">Під контролем</span>
+          <span id="badgeCountSafe" class="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800">20
+            927</span>
+        </button>
+        <button type="button" id="btnFilterModeMixed" class="hidden px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 text-slate-600 hover:text-slate-900 font-medium">
+          <span class="w-2 h-2 rounded-full bg-violet-500"></span><span>Змішані</span>
+          <span id="badgeCountMixed" class="text-[10px] px-1.5 rounded-full bg-violet-100 text-violet-800">0</span>
+        </button>
+      </div>
+
+    </div>
+
+    <div class="pb-2 flex flex-wrap items-center gap-2 text-xs">
+      <span class="text-slate-500 font-medium flex flex-wrap items-center gap-1.5" role="status" aria-live="polite">
+        <span>Знайдено: <strong class="text-slate-900 font-bold" id="lblFilteredCount">0</strong> <span id="lblResultUnit">об'єктів</span></span>
+        <span id="tagTotActive"
+          class="hidden inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold">
+          <span>Фільтр ТОТ</span>
+          <button id="btnRemoveTotFilter" class="hover:underline text-rose-950 font-extrabold"
+            title="Зняти фільтр ТОТ та показати всі об'єкти">(зняти)</button>
+        </span>
+      </span>
+      <button id="btnExportCsv" aria-label="Завантажити результати у CSV"
+        class="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold transition-colors text-xs">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">CSV</span>
+      </button>
+
+      <button id="btnToggleFilters" type="button" aria-expanded="false" aria-controls="advancedFilterPanel" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 font-semibold hover:bg-slate-100">
+        <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>Фільтри
+        <span id="activeFiltersCount" class="hidden px-1.5 rounded-full bg-blue-100 text-blue-800"></span>
+        <i id="filtersChevron" data-lucide="chevron-down" class="w-3.5 h-3.5 transition-transform"></i>
+      </button>
+
+      <button id="btnResetFilters"
+        class="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-rose-700 hover:bg-rose-50 transition-colors font-medium text-xs ml-auto flex items-center gap-1">
+        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>Скинути
+      </button>
+    </div>
+
+    <p id="activeFiltersSummary" class="hidden pb-2 text-xs text-slate-600"></p>
+    <p id="groupFilterExplanation" class="hidden pb-2 text-[11px] text-slate-500">Змішані території мають і контрольовані, і зачеплені пункти. Підсумки за населеними пунктами рівня 4; у Києві та Севастополі — за районами міста.</p>
+
+    <div id="advancedFilterPanel" class="hidden pt-3 border-t border-slate-200">
+      <div class="pb-3 flex flex-wrap gap-3 text-xs">
+        <label class="flex flex-col gap-1 text-slate-600 font-medium">Рівень
+          <select id="selectLevel" class="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100">
+            <option value="all">Усі рівні</option>
+            <option value="4" selected>Населені пункти</option>
+            <option value="3">Громади</option>
+            <option value="2">Райони</option>
+            <option value="1">Регіони</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-slate-600 font-medium">Статус території
+          <select id="selectStatusCategory" class="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="all">Усі статуси</option>
+            <option value="occupied">Тимчасово окупована</option>
+            <option value="active">Активні бойові дії</option>
+            <option value="possible">Можливі бойові дії</option>
+            <option value="safe">Під контролем України</option>
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-slate-600 font-medium">Електронні реєстри
+          <select id="selectRegistries" class="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="all">Усі</option>
+            <option value="yes">Діють</option>
+            <option value="no">Не діють</option>
+          </select>
+        </label>
+      </div>
+
+    <!-- ROW 2: Geographic Drill-Down (Oblast > Raion > Hromada) -->
+    <div class="pb-2.5 flex flex-wrap items-center gap-1 text-xs">
+      <span class="flex items-center text-slate-500 font-semibold">
+        <i data-lucide="map-pin" class="w-3.5 h-3.5 mr-1 text-blue-500"></i>
+        Локація:
+      </span>
+
+      <button id="btnGeoAll"
+        class="px-2.5 py-1 rounded-lg font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 transition-colors">
+        🇺🇦 Україна
+      </button>
+
+      <span class="geo-sep"></span>
+      <select id="selectOblast"
+        aria-label="Регіон"
+        class="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-300 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="">Оберіть регіон...</option>
+      </select>
+
+      <span id="geoSepRaion" class="geo-sep hidden"></span>
+      <select id="selectRaion"
+        aria-label="Район"
+        class="hidden px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-300 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="">Оберіть район...</option>
+      </select>
+
+      <span id="geoSepHromada" class="geo-sep hidden"></span>
+      <select id="selectHromada"
+        aria-label="Територіальна громада"
+        class="hidden px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-300 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <option value="">Оберіть громаду...</option>
+      </select>
+    </div>
+    </div>
+
+  </section>
+
+  <!-- WORKSPACE -->
+  <main class="flex-1 relative overflow-hidden bg-slate-100">
+
+    <!-- TAB 1: TABLE -->
+    <div id="viewTable" class="h-full flex flex-col overflow-hidden bg-white">
+      <div class="flex-1 overflow-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-xs">
+          <thead class="bg-slate-50 text-slate-600 font-semibold sticky top-0 z-10 border-b border-slate-200">
+            <tr>
+              <th class="px-3 py-3 text-left font-bold text-slate-800">ID (5 знаків)</th>
+              <th class="px-4 py-3 text-left">Населений пункт / Об'єкт</th>
+              <th class="px-3 py-3 text-left">Рівень / Тип</th>
+              <th class="px-3 py-3 text-left">Код КАТОТТГ (19 знаків)</th>
+              <th class="px-3 py-3 text-left">Область › Район › Громада</th>
+              <th class="px-4 py-3 text-left">Статус окупації / бойових дій</th>
+              <th class="px-3 py-3 text-center">Початок</th>
+              <th class="px-3 py-3 text-center">Завершення</th>
+              <th class="px-3 py-3 text-center">Системи</th>
+              <th class="px-3 py-3 text-center">Дія</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-slate-100 bg-white"></tbody>
+        </table>
+        <div id="tableEmptyState" class="hidden py-16 text-center space-y-2">
+          <i data-lucide="search-x" class="w-10 h-10 mx-auto text-slate-300"></i>
+          <h3 class="text-sm font-bold text-slate-700">Жодного об'єкта не знайдено</h3>
+          <p class="text-xs text-slate-400">Спробуйте змінити критерії пошуку або скинути фільтри</p>
+        </div>
+      </div>
+      <div
+        class="h-14 border-t border-slate-200 px-4 sm:px-6 bg-slate-50 flex items-center justify-between flex-shrink-0 text-xs">
+        <div class="text-slate-500 font-medium">Показано <span id="lblPageRange">0–0</span> з <span
+            id="lblTotalItems">0</span></div>
+        <div class="flex items-center space-x-1.5">
+          <button id="btnPrevPage"
+            class="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium shadow-2xs">←
+            Попередня</button>
+          <span
+            class="px-3 py-1.5 font-bold text-slate-800 bg-white border border-slate-300 rounded-lg shadow-2xs">Стор.
+            <span id="lblCurrentPage">1</span> з <span id="lblTotalPages">1</span></span>
+          <button id="btnNextPage"
+            class="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed font-medium shadow-2xs">Наступна
+            →</button>
+          <select id="selectPageSize"
+            class="ml-2 px-2 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 font-medium text-xs">
+            <option value="25">25 / стор</option>
+            <option value="50" selected>50 / стор</option>
+            <option value="100">100 / стор</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: HIERARCHY -->
+    <div id="viewHierarchy" class="hidden h-full flex flex-col bg-slate-50 overflow-hidden">
+      <div class="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 flex flex-wrap items-center gap-x-4 gap-y-2 flex-shrink-0">
+        <nav aria-label="Адміністративна ієрархія" class="flex flex-wrap items-center gap-1.5 text-sm flex-1 min-w-0">
+          <button id="hierBreadcrumbRoot" class="font-bold text-blue-700 hover:underline flex items-center gap-1.5 flex-shrink-0">
+            <i data-lucide="home" class="w-3.5 h-3.5"></i><span>Україна</span>
+          </button>
+          <div id="hierBreadcrumbPath" class="flex flex-wrap items-center gap-1.5 text-slate-600"></div>
+          <span id="hierLevelBadge"
+            class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 whitespace-nowrap">Рівень:
+            Регіони</span>
+        </nav>
+      </div>
+      <div id="hierContent" class="flex-1 min-h-0 overflow-auto p-3 sm:p-4">
+        <div id="hierGrid"></div>
+        <div id="hierEmpty" class="hidden py-16 text-center space-y-2">
+          <i data-lucide="folder-open" class="w-10 h-10 mx-auto text-slate-300"></i>
+          <p class="text-sm font-bold text-slate-600">Немає елементів для відображення</p>
+          <p class="text-xs text-slate-400">Змініть фільтри або оберіть інший рівень</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: MAP -->
+    <div id="viewMap" class="hidden h-full relative">
+      <div class="absolute top-4 left-4 z-20 flex flex-col space-y-3 pointer-events-auto max-w-[280px]">
+        <div class="glass-panel rounded-2xl p-3.5 shadow-lg border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <i data-lucide="layers" class="w-3.5 h-3.5 text-blue-600"></i> Шари карти
+            </span>
+            <span id="mapActiveLevelBadge"
+              class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">Регіони</span>
+          </div>
+          <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+            <div class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Фільтр територій на карті</div>
+            <div class="grid grid-cols-2 gap-1 text-[11px] font-semibold" id="mapFilterModeGroup">
+              <button type="button" id="btnMapModeAll"
+                class="px-2 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-center shadow-xs text-xs">Всі</button>
+              <button type="button" id="btnMapModeMixed" class="hidden px-2 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 font-medium text-center text-xs">Змішані</button>
+              <button type="button" id="btnMapModeOccupied"
+                class="px-2 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-center font-medium text-xs">Тільки
+                ТОТ</button>
+              <button type="button" id="btnMapModeSafe"
+                class="px-2 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 text-center font-medium text-xs">Без
+                ТОТ</button>
+            </div>
+            <p id="lblMapModeHint" class="text-[10px] text-slate-500 leading-tight">Відображаються всі об'єкти України
+            </p>
+          </div>
+          <div class="space-y-1.5 text-xs font-medium">
+            <button data-map-level="1"
+              class="map-level-btn w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors bg-blue-600 text-white font-semibold shadow-xs">
+              <span>Рівень 1: Регіони</span><span class="text-[10px] opacity-80">27</span>
+            </button>
+            <button data-map-level="2"
+              class="map-level-btn w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-slate-700 hover:bg-slate-100">
+              <span>Рівень 2: Райони</span><span class="text-[10px] opacity-80">139</span>
+            </button>
+            <button data-map-level="3"
+              class="map-level-btn w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-slate-700 hover:bg-slate-100">
+              <span>Рівень 3: Громади</span><span class="text-[10px] opacity-80">1 769</span>
+            </button>
+            <button data-map-level="4"
+              class="map-level-btn w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-slate-700 hover:bg-slate-100">
+              <span>Рівень 4: Поселення</span><span class="text-[10px] opacity-80">29.7 тис</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="map"></div>
+
+      <div id="mapObjectSidebar"
+        class="hidden absolute top-4 right-4 bottom-4 w-80 sm:w-96 z-20 pointer-events-auto flex flex-col">
+        <div class="glass-panel rounded-2xl shadow-2xl border border-slate-200 flex flex-col h-full overflow-hidden">
+          <div class="p-4 border-b border-slate-200 flex items-start justify-between bg-slate-50">
+            <div>
+              <span id="mapDetailBadge"
+                class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">Населений
+                пункт</span>
+              <h2 id="mapDetailTitle" class="font-display font-bold text-lg text-slate-900 mt-1 leading-snug">—</h2>
+              <p id="mapDetailCategory" class="text-xs text-slate-500">—</p>
+            </div>
+            <button id="btnMapCloseSidebar"
+              class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors">
+              <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+          </div>
+          <div class="p-4 space-y-4 overflow-y-auto flex-1 text-xs">
+            <div id="mapDetailStatusBanner"
+              class="p-3 rounded-xl flex items-center gap-2.5 font-semibold text-xs border bg-emerald-50 text-emerald-900 border-emerald-200">
+              <i data-lucide="shield-check" class="w-5 h-5 flex-shrink-0"></i>
+              <span id="mapDetailStatusText">Під контролем України</span>
+            </div>
+            <div id="mapDetailStatusBreakdown" class="hidden text-xs space-y-1"></div>
+            <div class="p-3 bg-slate-100 rounded-xl space-y-1.5 border border-slate-200">
+              <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Адміністративна ієрархія</div>
+              <div class="space-y-1 text-slate-700 font-medium">
+                <div><span class="text-slate-500">Область:</span> <strong class="text-slate-900"
+                    id="mapValRegion">—</strong></div>
+                <div><span class="text-slate-500">Район:</span> <strong class="text-slate-900"
+                    id="mapValRaion">—</strong></div>
+                <div><span class="text-slate-500">Громада:</span> <strong class="text-slate-900"
+                    id="mapValHromada">—</strong></div>
+              </div>
+            </div>
+            <div class="p-3 bg-slate-100 rounded-xl space-y-2 border border-slate-200">
+              <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Ідентифікатори КАТОТТГ</div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500">Повний КАТОТТГ:</span>
+                <div class="flex items-center gap-1">
+                  <code class="font-mono font-bold text-blue-600 text-xs" id="mapValKatottg">—</code>
+                  <button onclick="copyToClipboard(document.getElementById('mapValKatottg').textContent)"
+                    class="p-0.5 text-slate-400 hover:text-slate-700">
+                    <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-500">5-значний код:</span>
+                <span class="font-mono font-bold text-slate-800" id="mapValKey5">—</span>
+              </div>
+            </div>
+            <div id="mapDetailOrderBox"
+              class="p-3 bg-amber-50 rounded-xl space-y-1.5 border border-amber-200 text-slate-700">
+              <div class="text-[10px] uppercase font-bold text-amber-800 tracking-wider flex items-center gap-1">
+                <i data-lucide="calendar" class="w-3 h-3"></i> Терміни дії наказу
+              </div>
+              <div class="flex justify-between"><span class="text-slate-500">Початок:</span><strong
+                  id="mapValDateStart">—</strong></div>
+              <div class="flex justify-between"><span class="text-slate-500">Завершення:</span><strong
+                  id="mapValDateEnd">—</strong></div>
+              <div class="flex justify-between"><span class="text-slate-500">Системи:</span><strong
+                  id="mapValSystems">—</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ==================== OBJECT CARD MODAL ==================== -->
+  <div id="objectCardModal"
+    class="hidden fixed inset-0 z-[60] bg-slate-900/75 backdrop-blur-sm flex items-stretch p-0 sm:p-4 md:p-6">
+    <div id="objectCardInner"
+      class="relative bg-white w-full sm:rounded-2xl shadow-2xl flex flex-col md:flex-row overflow-hidden max-w-6xl mx-auto border border-slate-200">
+
+      <!-- Close button -->
+      <button id="btnCloseObjectCard"
+        class="absolute top-3 right-3 z-30 p-2 rounded-xl bg-white/90 hover:bg-slate-100 text-slate-600 shadow-md transition-all border border-slate-200">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <!-- Left: Mini Map (Shows ONLY the single selected object's boundary) -->
+      <div class="relative flex-1 min-h-[320px] md:min-h-0 bg-slate-900 overflow-hidden flex flex-col">
+        <!-- Top overlay badge -->
+        <div class="absolute top-3 left-3 z-20 pointer-events-auto">
+          <div
+            class="glass-panel px-3 py-1.5 rounded-xl shadow-md border border-slate-200/90 flex items-center gap-2 text-xs font-semibold text-slate-800">
+            <span id="objCardMapDot" class="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse"></span>
+            <span id="objCardMapBoundaryLabel">Межі виділеного об'єкта</span>
+            <span class="text-[10px] text-slate-500 font-normal border-l border-slate-200 pl-2 hidden sm:inline">Без меж
+              інших об'єктів</span>
+          </div>
+        </div>
+
+        <!-- Map Leaflet Container -->
+        <div id="objCardMap" class="w-full h-full flex-1"></div>
+
+        <!-- Map Loading Overlay -->
+        <div id="objCardMapLoading"
+          class="hidden absolute inset-0 z-20 bg-slate-900/50 backdrop-blur-xs flex flex-col items-center justify-center text-white space-y-2">
+          <i data-lucide="loader-2" class="w-7 h-7 animate-spin text-blue-400"></i>
+          <span class="text-xs font-semibold">Завантаження контуру об'єкта...</span>
+        </div>
+
+        <!-- Map bottom breadcrumbs -->
+        <div class="absolute bottom-3 left-3 z-20 max-w-[85%] pointer-events-none">
+          <span id="objCardMapBadge"
+            class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-white/95 text-slate-800 shadow-md border border-slate-200 truncate inline-block pointer-events-auto">—</span>
+        </div>
+
+        <!-- Map re-center button -->
+        <div class="absolute bottom-3 right-3 z-20 pointer-events-auto">
+          <button id="btnObjCardFitBounds" title="Центрувати на об'єкті"
+            class="p-2 rounded-xl bg-white/95 hover:bg-slate-100 text-slate-700 shadow-md border border-slate-200 transition-colors">
+            <i data-lucide="scan" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Right: Details, History, and Characteristics Panel -->
+      <div
+        class="w-full md:w-[480px] lg:w-[500px] flex-shrink-0 flex flex-col overflow-hidden border-t md:border-t-0 md:border-l border-slate-200 bg-white">
+        <!-- Header -->
+        <div id="objCardHeader" class="p-5 border-b border-slate-200 bg-slate-50/70 flex-shrink-0">
+          <div class="flex items-start gap-3">
+            <div id="objCardStatusDot" class="w-3.5 h-3.5 rounded-full bg-emerald-500 mt-1 flex-shrink-0"></div>
+            <div class="flex-1 min-w-0 pr-6">
+              <div class="flex items-center gap-1.5 flex-wrap mb-1">
+                <span id="objCardIdBadge"
+                  class="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">ID:
+                  —</span>
+                <span id="objCardLevelBadge"
+                  class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">Рівень
+                  4</span>
+                <span id="objCardCategoryBadge"
+                  class="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-200 text-slate-700">Населений
+                  пункт</span>
+              </div>
+              <h2 id="objCardTitle" class="font-display font-bold text-xl text-slate-900 leading-snug truncate">—</h2>
+              <p id="objCardHierarchySubtitle" class="text-xs text-slate-500 mt-0.5 truncate">—</p>
+            </div>
+          </div>
+
+          <!-- Status banner -->
+          <div id="objCardStatusBanner"
+            class="mt-3 px-3 py-2 rounded-xl flex items-center gap-2.5 text-xs font-semibold border bg-emerald-50 text-emerald-900 border-emerald-200">
+            <i id="objCardStatusIcon" data-lucide="shield-check" class="w-4 h-4 flex-shrink-0"></i>
+            <span id="objCardStatusText" class="flex-1 leading-tight">Під контролем України</span>
+          </div>
+        </div>
+
+        <!-- Body (Scrollable) -->
+        <div class="flex-1 overflow-y-auto p-5 space-y-5 text-xs">
+
+          <!-- SECTION 1: ІСТОРИЧНІСТЬ ТА НАКАЗИ -->
+          <div>
+            <div class="flex items-center justify-between mb-2.5">
+              <div class="text-[11px] uppercase font-bold text-slate-800 tracking-wider flex items-center gap-1.5">
+                <i data-lucide="history" class="w-4 h-4 text-blue-600"></i>
+                <span>Історичність змін статусу</span>
+              </div>
+              <span id="objCardVersionBadge"
+                class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">0
+                редакцій</span>
+            </div>
+
+            <!-- History Timeline Container -->
+            <div id="objCardHistoryTimeline" class="space-y-2.5">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- SECTION 2: ХАРАКТЕРИСТИКИ ОБ'ЄКТА -->
+          <div>
+            <div class="text-[11px] uppercase font-bold text-slate-800 tracking-wider mb-2.5 flex items-center gap-1.5">
+              <i data-lucide="sliders" class="w-4 h-4 text-blue-600"></i>
+              <span>Характеристики об'єкта</span>
+            </div>
+
+            <div class="bg-slate-50 rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+              <!-- 5-digit ID (prominent top position) -->
+              <div class="p-3 bg-amber-50/60 flex items-center justify-between">
+                <div>
+                  <div class="text-[10px] text-amber-900 font-bold uppercase tracking-wider">ID об'єкта (5-значний код)
+                  </div>
+                  <span class="font-mono font-black text-amber-950 text-base tracking-wider select-all"
+                    id="objCardKey5">—</span>
+                </div>
+                <button onclick="copyToClipboard(document.getElementById('objCardKey5').textContent)"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 transition-colors shadow-2xs text-[11px] font-bold"
+                  title="Копіювати 5-значний ID">
+                  <i data-lucide="copy" class="w-3.5 h-3.5"></i> Копіювати ID
+                </button>
+              </div>
+
+              <!-- Full KATOTTG -->
+              <div class="p-3 flex items-center justify-between">
+                <div>
+                  <div class="text-[10px] text-slate-400 font-medium">Повний код КАТОТТГ (19 знаків)</div>
+                  <code class="font-mono font-bold text-blue-600 text-xs select-all" id="objCardKatottg">—</code>
+                </div>
+                <button onclick="copyToClipboard(document.getElementById('objCardKatottg').textContent)"
+                  class="p-1.5 rounded-lg bg-white border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors shadow-2xs"
+                  title="Копіювати КАТОТТГ">
+                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+
+              <!-- P-Code Prefix -->
+              <div class="p-3">
+                <div class="text-[10px] text-slate-400 font-medium">Префікс P-Code</div>
+                <span class="font-mono font-semibold text-slate-700 text-xs" id="objCardPcode">—</span>
+              </div>
+
+              <!-- Category & Level -->
+              <div class="p-3 grid grid-cols-2 gap-3">
+                <div>
+                  <div class="text-[10px] text-slate-400 font-medium">Категорія та тип</div>
+                  <span class="font-semibold text-slate-800 text-xs" id="objCardCategoryFull">—</span>
+                </div>
+                <div>
+                  <div class="text-[10px] text-slate-400 font-medium">Рівень устрою</div>
+                  <span class="font-semibold text-slate-800 text-xs" id="objCardAdminLevelName">—</span>
+                </div>
+              </div>
+
+              <!-- Parent KATOTTG -->
+              <div class="p-3 flex items-center justify-between">
+                <div>
+                  <div class="text-[10px] text-slate-400 font-medium">Батьківський КАТОТТГ</div>
+                  <code class="font-mono font-medium text-slate-700 text-xs select-all"
+                    id="objCardParentKatottg">—</code>
+                </div>
+                <button onclick="copyToClipboard(document.getElementById('objCardParentKatottg').textContent)"
+                  class="p-1 rounded bg-white border border-slate-200 text-slate-400 hover:text-slate-700"
+                  title="Копіювати">
+                  <i data-lucide="copy" class="w-3 h-3"></i>
+                </button>
+              </div>
+
+              <!-- Status of Occupation / Combat Actions & Status of Registries Usage (DEDICATED ROW) -->
+              <div class="p-3 bg-slate-50/90 border-y border-slate-200">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="space-y-1">
+                    <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-slate-600"></i>
+                      <span>Статус окупації / бойових дій</span>
+                    </div>
+                    <div id="objCardOccupationStatusBadge" class="pt-0.5">—</div>
+                  </div>
+                  <div class="space-y-1">
+                    <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <i data-lucide="database" class="w-3.5 h-3.5 text-slate-600"></i>
+                      <span>Статус використання реєстрів</span>
+                    </div>
+                    <div id="objCardCurrentRegistries" class="pt-0.5">—</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Area / Geometry metrics -->
+              <div class="p-3">
+                <div class="text-[10px] text-slate-400 font-medium">Орієнтовна площа</div>
+                <span class="font-bold text-slate-900 text-xs" id="objCardArea">—</span>
+              </div>
+
+              <!-- Settlements in hromada/raion if applicable -->
+              <div id="objCardSettlementsRow" class="hidden p-3 bg-blue-50/50">
+                <div class="text-[10px] text-blue-700 font-semibold mb-1">Підсумок за територією</div>
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-600">Усього: <strong class="text-slate-900"
+                      id="objCardSettlementsTotal">—</strong></span>
+                  <span class="text-slate-600">ТОТ / бойові дії: <strong class="text-rose-700"
+                      id="objCardSettlementsOccupied">—</strong></span>
+                </div>
+                <div id="objCardStatusBreakdown" class="hidden mt-2 text-xs space-y-1"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SECTION 3: АДМІНІСТРАТИВНА ІЄРАРХІЯ -->
+          <div>
+            <div class="text-[11px] uppercase font-bold text-slate-800 tracking-wider mb-2.5 flex items-center gap-1.5">
+              <i data-lucide="network" class="w-4 h-4 text-blue-600"></i>
+              <span>Адміністративна приналежність</span>
+            </div>
+            <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-slate-700">
+              <div class="flex items-center gap-2">
+                <i data-lucide="map" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
+                <span class="text-slate-500 w-16">Область:</span>
+                <strong id="objCardRegion" class="text-slate-900 font-semibold">—</strong>
+              </div>
+              <div class="flex items-center gap-2">
+                <i data-lucide="landmark" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
+                <span class="text-slate-500 w-16">Район:</span>
+                <strong id="objCardRaion" class="text-slate-900 font-semibold">—</strong>
+              </div>
+              <div class="flex items-center gap-2">
+                <i data-lucide="building-2" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
+                <span class="text-slate-500 w-16">Громада:</span>
+                <strong id="objCardHromada" class="text-slate-900 font-semibold">—</strong>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="p-4 border-t border-slate-200 bg-slate-50/70 flex flex-wrap gap-2 flex-shrink-0">
+          <button id="objCardBtnOpenMap"
+            class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-sm">
+            <i data-lucide="map-pin" class="w-4 h-4"></i> Відкрити на головній карті
+          </button>
+          <button onclick="copyToClipboard(document.getElementById('objCardKatottg').textContent)"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors shadow-2xs">
+            <i data-lucide="copy" class="w-4 h-4"></i> Копіювати код
+          </button>
+          <button id="objCardBtnCopyLink" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 transition-colors shadow-2xs">
+            <i data-lucide="link" class="w-4 h-4"></i> Копіювати посилання
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADER -->
+  <div id="globalLoader"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex flex-col items-center justify-center text-white space-y-3">
+    <div class="p-3.5 bg-blue-600 rounded-2xl shadow-2xl animate-spin">
+      <i data-lucide="loader-2" class="w-8 h-8 text-white"></i>
+    </div>
+    <div class="text-center space-y-1">
+      <h3 class="font-display font-bold text-lg" id="globalLoaderTitle">Завантаження реєстру КАТОТТГ...</h3>
+      <p class="text-xs text-slate-300" id="globalLoaderSubtitle">Обробка даних...</p>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+
+    // ===== STATE =====
+    let allData = [];
+    let statusSummaryIndex = new Map();
+    let restoringUrl = true;
+    let currentMapObjectKatottg = null;
+    let filteredData = [];
+    let currentPage = 1;
+    let pageSize = 50;
+    let hierState = { level: 1, oblast: null, raion: null, hromada: null, hromadaKatottg: null, _isSpecialCity: false };
+    let currentView = 'table';
+    let hierarchyVisibleItems = [];
+    let filteredKatottgCodes = new Set();
+    let currentMapLevel = 1;
+    let mapLayers = {};
+    let mapInstance = null;
+    let mapInitialized = false;
+    let mapLoadPromise = null;
+
+    // ===== ELEMENTS =====
+    const btnSwitchTable = document.getElementById('btnSwitchTable');
+    const btnSwitchHierarchy = document.getElementById('btnSwitchHierarchy');
+    const btnSwitchMap = document.getElementById('btnSwitchMap');
+    const viewTable = document.getElementById('viewTable');
+    const viewHierarchy = document.getElementById('viewHierarchy');
+    const viewMap = document.getElementById('viewMap');
+    const filterSearchInput = document.getElementById('filterSearchInput');
+    const btnClearSearchInput = document.getElementById('btnClearSearchInput');
+    const selectLevel = document.getElementById('selectLevel');
+    let currentFilterMode = 'all'; // 'all' | 'occupied' | 'mixed' | 'safe'
+    const btnFilterModeAll = document.getElementById('btnFilterModeAll');
+    const btnFilterModeOccupied = document.getElementById('btnFilterModeOccupied');
+    const btnFilterModeSafe = document.getElementById('btnFilterModeSafe');
+    const btnFilterModeMixed = document.getElementById('btnFilterModeMixed');
+    const badgeCountMixed = document.getElementById('badgeCountMixed');
+    const badgeCountAll = document.getElementById('badgeCountAll');
+    const badgeCountOccupied = document.getElementById('badgeCountOccupied');
+    const badgeCountSafe = document.getElementById('badgeCountSafe');
+    const tagTotActive = document.getElementById('tagTotActive');
+    const btnRemoveTotFilter = document.getElementById('btnRemoveTotFilter');
+    const btnMapModeAll = document.getElementById('btnMapModeAll');
+    const btnMapModeOccupied = document.getElementById('btnMapModeOccupied');
+    const btnMapModeSafe = document.getElementById('btnMapModeSafe');
+    const btnMapModeMixed = document.getElementById('btnMapModeMixed');
+    const lblMapModeHint = document.getElementById('lblMapModeHint');
+    const selectStatusCategory = document.getElementById('selectStatusCategory');
+    const selectRegistries = document.getElementById('selectRegistries');
+    const btnResetFilters = document.getElementById('btnResetFilters');
+    const lblFilteredCount = document.getElementById('lblFilteredCount');
+    const btnExportCsv = document.getElementById('btnExportCsv');
+    const btnGeoAll = document.getElementById('btnGeoAll');
+    const selectOblast = document.getElementById('selectOblast');
+    const selectRaion = document.getElementById('selectRaion');
+    const selectHromada = document.getElementById('selectHromada');
+    const geoSepRaion = document.getElementById('geoSepRaion');
+    const geoSepHromada = document.getElementById('geoSepHromada');
+    const tableBody = document.getElementById('tableBody');
+    const tableEmptyState = document.getElementById('tableEmptyState');
+    const lblPageRange = document.getElementById('lblPageRange');
+    const lblTotalItems = document.getElementById('lblTotalItems');
+    const lblCurrentPage = document.getElementById('lblCurrentPage');
+    const lblTotalPages = document.getElementById('lblTotalPages');
+    const btnPrevPage = document.getElementById('btnPrevPage');
+    const btnNextPage = document.getElementById('btnNextPage');
+    const selectPageSize = document.getElementById('selectPageSize');
+    const hierGrid = document.getElementById('hierGrid');
+    const hierEmpty = document.getElementById('hierEmpty');
+    const advancedFilterPanel = document.getElementById('advancedFilterPanel');
+    const btnToggleFilters = document.getElementById('btnToggleFilters');
+    const mapSearchResults = document.getElementById('mapSearchResults');
+    const hierBreadcrumbPath = document.getElementById('hierBreadcrumbPath');
+    const hierLevelBadge = document.getElementById('hierLevelBadge');
+    const globalLoader = document.getElementById('globalLoader');
+
+    // ===== LOADER =====
+    function showLoader(t, s) {
+      document.getElementById('globalLoaderTitle').textContent = t;
+      document.getElementById('globalLoaderSubtitle').textContent = s;
+      globalLoader.classList.remove('hidden');
+    }
+    function hideLoader() { globalLoader.classList.add('hidden'); }
+
+    // ===== VIEW SWITCHING =====
+    const ACTIVE_TAB = 'flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs bg-white text-blue-700';
+    const INACTIVE_TAB = 'flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all';
+
+    function switchView(v) {
+      const mapLevel = currentMapLevel;
+      currentView = v;
+      viewTable.classList.add('hidden'); viewHierarchy.classList.add('hidden'); viewMap.classList.add('hidden');
+      btnSwitchTable.className = INACTIVE_TAB; btnSwitchHierarchy.className = INACTIVE_TAB; btnSwitchMap.className = INACTIVE_TAB;
+      if (v === 'table') { viewTable.classList.remove('hidden'); btnSwitchTable.className = ACTIVE_TAB; }
+      else if (v === 'hierarchy') { viewHierarchy.classList.remove('hidden'); btnSwitchHierarchy.className = ACTIVE_TAB; syncHierarchyFromLocation(); }
+      else if (v === 'map') {
+        viewMap.classList.remove('hidden'); btnSwitchMap.className = ACTIVE_TAB;
+        if (!mapInitialized) initMapIfNeeded(mapLevel);
+        else mapLoadPromise = loadMapLevel(mapLevel);
+        setTimeout(() => { if (mapInstance) mapInstance.invalidateSize(); }, 100);
+      }
+      applyFilters();
+    }
+
+    btnSwitchTable.addEventListener('click', () => switchView('table'));
+    btnSwitchHierarchy.addEventListener('click', () => switchView('hierarchy'));
+    btnSwitchMap.addEventListener('click', () => switchView('map'));
+
+    btnToggleFilters.addEventListener('click', () => {
+      const expanded = btnToggleFilters.getAttribute('aria-expanded') !== 'true';
+      btnToggleFilters.setAttribute('aria-expanded', String(expanded));
+      advancedFilterPanel.classList.toggle('hidden', !expanded);
+      document.getElementById('filtersChevron').style.transform = expanded ? 'rotate(180deg)' : '';
+      if (mapInstance) requestAnimationFrame(() => mapInstance.invalidateSize());
+    });
+
+    function clearSharedSearch() {
+      filterSearchInput.value = '';
+      btnClearSearchInput.classList.add('hidden');
+      mapSearchResults.classList.add('hidden');
+    }
+
+    function matchesSearch(item) {
+      const query = filterSearchInput.value.trim().toLowerCase();
+      if (!query) return true;
+      return [item.name_ua || item.name, item.katottg,
+        item.katottg_key5 || allDataByKatottg.get(item.katottg)?.katottg_key5]
+        .some(value => String(value || '').toLowerCase().includes(query));
+    }
+
+    function syncViewLevel() {
+      if (currentView === 'hierarchy') {
+        selectLevel.value = String(hierState.level === 2 && isSpecialCityOblast(hierState.oblast) ? 4 : hierState.level);
+      } else if (currentView === 'map') selectLevel.value = String(currentMapLevel);
+      selectLevel.disabled = currentView !== 'table';
+      selectLevel.title = currentView === 'hierarchy' ? 'Рівень змінюється під час переходів в ієрархії' :
+        currentView === 'map' ? 'Рівень змінюється в панелі шарів карти' : '';
+      const names = { 1: 'регіонів', 2: 'районів', 3: 'громад', 4: 'населених пунктів' };
+      filterSearchInput.placeholder = currentView === 'hierarchy'
+        ? `Пошук ${hierState.level === 2 && isSpecialCityOblast(hierState.oblast) ? 'районів міста' : names[selectLevel.value]} за назвою або кодом...`
+        : currentView === 'map' ? 'Пошук на карті за назвою або кодом...' : 'Пошук за назвою або кодом...';
+    }
+
+    function getResultUnit(count) {
+      const forms = currentView === 'hierarchy' && hierState.level === 2 && isSpecialCityOblast(hierState.oblast)
+        ? ['район міста', 'райони міста', 'районів міста']
+        : { 1: ['регіон', 'регіони', 'регіонів'], 2: ['район', 'райони', 'районів'],
+          3: ['громада', 'громади', 'громад'], 4: ['населений пункт', 'населені пункти', 'населених пунктів'] }[selectLevel.value]
+          || ["об'єкт", "об'єкти", "об'єктів"];
+      return getPlural(count, ...forms);
+    }
+
+    function updateFilterSummary() {
+      const summary = [];
+      const location = [selectOblast.value, selectRaion.value, selectHromada.value].filter(Boolean);
+      if (location.length) summary.push(location.join(' › '));
+      if (selectStatusCategory.value !== 'all') summary.push(selectStatusCategory.selectedOptions[0].textContent);
+      if (selectRegistries.value !== 'all') summary.push('Реєстри: ' + selectRegistries.selectedOptions[0].textContent.toLowerCase());
+      const count = summary.length + (currentView === 'table' && selectLevel.value !== '4' ? 1 : 0);
+      const badge = document.getElementById('activeFiltersCount');
+      badge.textContent = count;
+      badge.classList.toggle('hidden', !count);
+      const text = document.getElementById('activeFiltersSummary');
+      text.textContent = summary.join(' · ');
+      text.classList.toggle('hidden', !summary.length);
+    }
+
+    function getLocationCode(level, name) {
+      if (!name) return null;
+      const matches = allData.filter(item => item.admin_level === level && (item.name_ua || item.name) === name &&
+        (level === 1 || item.region_name === selectOblast.value) && (level < 3 || item.raion_name === selectRaion.value));
+      return matches.length === 1 ? matches[0].katottg : null;
+    }
+
+    function syncUrlState() {
+      if (restoringUrl || !allData.length) return;
+      const hromada = hierState.hromadaKatottg || getLocationCode(3, selectHromada.value);
+      const url = RegistryUrlState.write(location.href, {
+        view: currentView, level: currentView === 'hierarchy' ? String(hierState.level) : selectLevel.value,
+        region: getLocationCode(1, selectOblast.value), raion: getLocationCode(2, selectRaion.value), hromada,
+        hromada_name: hromada ? '' : selectHromada.value, q: filterSearchInput.value,
+        mode: currentFilterMode, status: selectStatusCategory.value, registries: selectRegistries.value,
+        card: objectCardModal.classList.contains('hidden') ? null : currentCardKatottg,
+        mapobject: currentView === 'map' && !mapSidebar.classList.contains('hidden') ? currentMapObjectKatottg : null
+      });
+      if (url !== location.href) history.replaceState(null, '', url);
+    }
+
+    async function restoreUrlState() {
+      restoringUrl = true;
+      const state = RegistryUrlState.read(location.href);
+      const get = (code, level) => { const item = allDataByKatottg.get(code); return item?.admin_level === level ? item : null; };
+      const community = get(state.hromada, 3);
+      const district = community ? getHierarchyAncestor(community, 2) : get(state.raion, 2);
+      const region = community ? getHierarchyAncestor(community, 1) : district ? getHierarchyAncestor(district, 1) : get(state.region, 1);
+      const name = item => item?.name_ua || item?.name || '';
+      selectOblast.value = name(region); updateRaionDropdown();
+      selectRaion.value = name(district); updateHromadaDropdown();
+      selectHromada.value = name(community) || state.hromada_name;
+      syncHierarchyFromLocation();
+      hierState.hromadaKatottg = community?.katottg || null;
+      geoSepRaion.classList.toggle('hidden', !selectOblast.value); selectRaion.classList.toggle('hidden', !selectOblast.value);
+      geoSepHromada.classList.toggle('hidden', !selectRaion.value); selectHromada.classList.toggle('hidden', !selectRaion.value);
+      filterSearchInput.value = state.q; btnClearSearchInput.classList.toggle('hidden', !state.q);
+      selectStatusCategory.value = state.status; selectRegistries.value = state.registries;
+      currentFilterMode = state.mode;
+      selectLevel.value = state.level || '4';
+      currentMapLevel = ['1', '2', '3', '4'].includes(state.level) ? Number(state.level) : 1;
+      objectCardModal.classList.add('hidden'); currentCardKatottg = null;
+      mapSidebar.classList.add('hidden'); currentMapObjectKatottg = null;
+      switchView(state.view);
+      if (state.view === 'map' && state.mapobject && allDataByKatottg.has(state.mapobject)) {
+        if (mapLoadPromise) await mapLoadPromise;
+        await showObjectOnMap(state.mapobject);
+      }
+      if (state.card) showObjectCard(state.card);
+      restoringUrl = false;
+      syncUrlState();
+    }
+
+    window.addEventListener('popstate', () => { if (allData.length) restoreUrlState(); });
+    document.getElementById('objCardBtnCopyLink').addEventListener('click', () => { syncUrlState(); copyToClipboard(location.href, 'Посилання скопійовано'); });
+
+    // ===== STATUS HELPERS =====
+    function getSettlementSummary(item) {
+      return item && item.admin_level < 4 ? statusSummaryIndex.get(item.katottg) : null;
+    }
+
+    function getRecordCategory(item) {
+      if (item.category === 'K') return 'Місто зі спеціальним статусом';
+      if (item.admin_level === 1) return (item.name_ua || item.name || '').includes('Крим') ? 'Автономна республіка' : 'Область';
+      return item.category_name || item.category || "Об'єкт";
+    }
+
+    function getStatusCategory(item) {
+      return getSettlementSummary(item)?.category || StatusSummary.rawCategory(item);
+    }
+
+    function getStandardStatusText(item) {
+      const summary = getSettlementSummary(item);
+      if (summary) return StatusSummary.statusText(summary);
+      if (!item || !item.is_occupied) return 'Під контролем України';
+      const s = item.status || '';
+      if (s.includes('Частково') || s.includes('Зона окупації')) return s;
+      const cat = getStatusCategory(item);
+      if (cat === 'occupied') return 'Тимчасово окупована';
+      if (cat === 'active') return 'Активні бойові дії';
+      if (cat === 'possible') return 'Можливі бойові дії';
+      return 'Під контролем України';
+    }
+
+    function renderStatusBadge(item) {
+      const cat = getStatusCategory(item);
+      const txt = getStandardStatusText(item);
+      const full = getSettlementSummary(item) ? txt : item.status || txt;
+      const styles = {
+        mixed: 'bg-violet-100 text-violet-800 border-violet-300',
+        occupied: 'bg-rose-100 text-rose-800 border-rose-300',
+        active: 'bg-orange-100 text-orange-800 border-orange-300',
+        possible: 'bg-amber-100 text-amber-800 border-amber-300',
+        safe: 'bg-emerald-100 text-emerald-800 border-emerald-300'
+      };
+      const dotColors = {
+        mixed: 'bg-violet-600',
+        occupied: 'bg-rose-600',
+        active: 'bg-orange-600',
+        possible: 'bg-amber-600',
+        safe: 'bg-emerald-600'
+      };
+      const cls = styles[cat] || styles.safe;
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold ${cls} border shadow-2xs" title="${full}"><span class="w-1.5 h-1.5 rounded-full ${dotColors[cat]} mr-1.5 flex-shrink-0"></span>${txt}</span>`;
+    }
+
+    function getStatusCardStyle(cat) {
+      const m = {
+        mixed: { dot: 'bg-violet-500', text: 'text-violet-700', bg: 'bg-violet-50 border-violet-200', bar: 'bg-violet-500' },
+        occupied: { dot: 'bg-rose-500', text: 'text-rose-700', bg: 'bg-rose-50 border-rose-200', bar: 'bg-rose-500' },
+        active: { dot: 'bg-orange-500', text: 'text-orange-700', bg: 'bg-orange-50 border-orange-200', bar: 'bg-orange-500' },
+        possible: { dot: 'bg-amber-500', text: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', bar: 'bg-amber-500' },
+        safe: { dot: 'bg-emerald-500', text: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', bar: 'bg-emerald-500' }
+      };
+      return m[cat] || m.safe;
+    }
+
+    function renderSummaryBreakdown(container, item) {
+      const summary = getSettlementSummary(item);
+      container.classList.toggle('hidden', !summary);
+      container.innerHTML = '';
+      if (!summary) return;
+      const labels = { occupied: 'Тимчасово окуповані', active: 'Активні бойові дії', possible: 'Можливі бойові дії', safe: 'Під контролем України' };
+      for (const key of ['occupied', 'active', 'possible', 'safe']) {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between gap-3 ' + getStatusCardStyle(key).text;
+        const label = document.createElement('span'); label.textContent = labels[key];
+        const count = document.createElement('strong'); count.textContent = summary.counts[key].toLocaleString('uk-UA');
+        row.append(label, count); container.appendChild(row);
+      }
+    }
+
+    // Fast lookup maps for dynamic feature synchronization with data.json
+    let allDataByKatottg = new Map();
+    let allDataByKey5 = new Map();
+
+    function getLiveItem(props) {
+      if (!props) return null;
+      return (props.katottg && allDataByKatottg.get(props.katottg)) ||
+             (props.katottg_key5 && allDataByKey5.get(props.katottg_key5)) ||
+             null;
+    }
+
+    // ===== LOAD DATA =====
+    async function loadDataUpdateDate() {
+      try {
+        const resp = await fetch('data_files/manifest.json', { cache: 'no-cache' });
+        if (!resp.ok) return;
+        const manifest = await resp.json();
+        const value = manifest.updated_at;
+        if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+        const date = new Date(value + 'T00:00:00Z');
+        if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return;
+        const time = document.getElementById('dataUpdatedAt');
+        time.dateTime = value;
+        time.textContent = date.toLocaleDateString('uk-UA', { timeZone: 'UTC' });
+        document.getElementById('dataUpdateInfo').classList.remove('hidden');
+      } catch {
+        // The optional manifest must not prevent the registry from loading.
+      }
+    }
+
+    async function loadInitialData() {
+      showLoader('Завантаження реєстру КАТОТТГ...', 'Зчитування data.json...');
+      try {
+        const resp = await fetch('data_files/data.json');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        allData = await resp.json();
+        statusSummaryIndex = StatusSummary.buildIndex(allData);
+
+        allDataByKatottg = new Map();
+        for (const item of allData.filter(x => x.katottg)) {
+          const previous = allDataByKatottg.get(item.katottg);
+          if (!previous || item.admin_level < previous.admin_level) allDataByKatottg.set(item.katottg, item);
+        }
+        allDataByKey5 = new Map(allData.filter(x => x.katottg_key5).map(x => [x.katottg_key5, x]));
+
+        const oblasts = [...new Set(allData.filter(x => x.region_name).map(x => x.region_name))].sort((a, b) => a.localeCompare(b, 'uk'));
+        oblasts.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o; opt.textContent = o;
+          selectOblast.appendChild(opt);
+        });
+
+        const occCount = allData.filter(x => x.is_occupied).length;
+        const totalCount = allData.length;
+        const safeCount = totalCount - occCount;
+
+        const bAll = document.getElementById('badgeCountAll');
+        const bOcc = document.getElementById('badgeCountOccupied');
+        const bSafe = document.getElementById('badgeCountSafe');
+        if (bAll) bAll.textContent = totalCount.toLocaleString('uk-UA');
+        if (bOcc) bOcc.textContent = occCount.toLocaleString('uk-UA');
+        if (bSafe) bSafe.textContent = safeCount.toLocaleString('uk-UA');
+
+        await restoreUrlState();
+      } catch (err) {
+        console.error(err);
+        alert('Не вдалося завантажити data_files/data.json.\nРепозиторій містить лише програму. Підготуйте власні дані в tools/prepare_data.html і помістіть згенеровані файли в data_files/.\nВідкрийте переглядач через локальний веб-сервер.');
+      } finally { hideLoader(); }
+    }
+
+    // ===== GEO DRILL =====
+    function updateRaionDropdown() {
+      const oblast = selectOblast.value;
+      selectRaion.innerHTML = '<option value="">Оберіть район...</option>';
+      if (!oblast) return;
+      const raions = [...new Set(allData.filter(x => x.region_name === oblast && x.raion_name).map(x => x.raion_name))].sort((a, b) => a.localeCompare(b, 'uk'));
+      raions.forEach(r => { const o = document.createElement('option'); o.value = r; o.textContent = r; selectRaion.appendChild(o); });
+    }
+
+    function updateHromadaDropdown() {
+      const oblast = selectOblast.value, raion = selectRaion.value;
+      selectHromada.innerHTML = '<option value="">Оберіть громаду...</option>';
+      if (!raion) return;
+      const hromadas = [...new Set(allData.filter(x => x.region_name === oblast && x.raion_name === raion && x.hromada_name).map(x => x.hromada_name))].sort((a, b) => a.localeCompare(b, 'uk'));
+      hromadas.forEach(h => { const o = document.createElement('option'); o.value = h; o.textContent = h; selectHromada.appendChild(o); });
+    }
+
+    function syncHierarchyFromLocation() {
+      const oblast = selectOblast.value || null;
+      const raion = selectRaion.value || null;
+      const hromada = selectHromada.value || null;
+      const sameCommunity = oblast === hierState.oblast && raion === hierState.raion && hromada === hierState.hromada;
+      hierState = { level: hromada ? 4 : raion ? 3 : oblast ? 2 : 1, oblast, raion, hromada,
+        hromadaKatottg: sameCommunity ? hierState.hromadaKatottg : null, _isSpecialCity: false };
+    }
+
+    function navigateHierarchy(level, oblast = null, raion = null, hromada = null, code = null) {
+      hierState = { level, oblast, raion, hromada, hromadaKatottg: code, _isSpecialCity: false };
+      selectOblast.value = oblast || '';
+      updateRaionDropdown();
+      selectRaion.value = raion || '';
+      updateHromadaDropdown();
+      selectHromada.value = hromada || '';
+      geoSepRaion.classList.toggle('hidden', !oblast); selectRaion.classList.toggle('hidden', !oblast);
+      geoSepHromada.classList.toggle('hidden', !raion); selectHromada.classList.toggle('hidden', !raion);
+      if (currentView === 'hierarchy') clearSharedSearch();
+      applyFilters();
+    }
+
+    function onOblastChange() {
+      const v = selectOblast.value;
+      hierState.hromadaKatottg = null;
+      geoSepRaion.classList.toggle('hidden', !v); selectRaion.classList.toggle('hidden', !v);
+      geoSepHromada.classList.add('hidden'); selectHromada.classList.add('hidden');
+      selectRaion.value = ''; selectHromada.value = '';
+      updateRaionDropdown();
+      syncHierarchyFromLocation();
+      if (currentView === 'hierarchy') clearSharedSearch();
+      applyFilters();
+    }
+
+    function onRaionChange() {
+      const v = selectRaion.value;
+      hierState.hromadaKatottg = null;
+      geoSepHromada.classList.toggle('hidden', !v); selectHromada.classList.toggle('hidden', !v);
+      selectHromada.value = '';
+      updateHromadaDropdown();
+      syncHierarchyFromLocation();
+      if (currentView === 'hierarchy') clearSharedSearch();
+      applyFilters();
+    }
+
+    selectOblast.addEventListener('change', onOblastChange);
+    selectRaion.addEventListener('change', onRaionChange);
+    selectHromada.addEventListener('change', () => {
+      hierState.hromadaKatottg = null;
+      syncHierarchyFromLocation();
+      if (currentView === 'hierarchy') clearSharedSearch();
+      applyFilters();
+    });
+
+    btnGeoAll.addEventListener('click', () => {
+      navigateHierarchy(1);
+    });
+
+    // ===== FILTER MODE (ALL / OCCUPIED / SAFE) =====
+    function setFilterMode(mode, triggerApply = true) {
+      currentFilterMode = mode;
+      updateFilterModeUI();
+      if (triggerApply) {
+        if (mode === 'all') {
+          if (selectStatusCategory.value !== 'all') selectStatusCategory.value = 'all';
+        } else if (mode === 'safe') {
+          if (selectStatusCategory.value !== 'all' && selectStatusCategory.value !== 'safe') {
+            selectStatusCategory.value = 'safe';
+          }
+        } else if (mode === 'occupied' || mode === 'mixed') selectStatusCategory.value = 'all';
+        applyFilters();
+      }
+    }
+
+    function updateFilterModeUI() {
+      const grouped = selectLevel.value !== '4';
+      document.getElementById('filterOccupiedLabel').textContent = grouped ? 'Повністю ТОТ / дії' : 'ТОТ / дії';
+      document.getElementById('filterSafeLabel').textContent = grouped ? 'Повний контроль' : 'Під контролем';
+      document.getElementById('groupFilterExplanation').classList.toggle('hidden', !grouped);
+      btnMapModeOccupied.textContent = grouped ? 'Повністю ТОТ / дії' : 'ТОТ / дії';
+      btnMapModeSafe.textContent = grouped ? 'Повний контроль' : 'Під контролем';
+      const activeClass = 'px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 bg-white text-blue-700 font-bold shadow-xs border border-slate-200/80';
+      const inactiveClass = 'px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 text-slate-600 hover:text-slate-900 font-medium';
+
+      if (btnFilterModeAll) btnFilterModeAll.className = currentFilterMode === 'all' ? activeClass : inactiveClass;
+      if (btnFilterModeOccupied) btnFilterModeOccupied.className = currentFilterMode === 'occupied' ? activeClass : inactiveClass;
+      if (btnFilterModeSafe) btnFilterModeSafe.className = currentFilterMode === 'safe' ? activeClass : inactiveClass;
+      btnFilterModeMixed.className = (currentFilterMode === 'mixed' ? activeClass : inactiveClass) + (grouped ? '' : ' hidden');
+      btnFilterModeAll.style.order = '0'; btnFilterModeSafe.style.order = '1';
+      btnFilterModeMixed.style.order = '2'; btnFilterModeOccupied.style.order = '3';
+
+      if (tagTotActive) tagTotActive.classList.toggle('hidden', currentFilterMode !== 'occupied');
+
+      const mapActive = 'px-2 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-center shadow-xs text-xs';
+      const mapInactive = 'px-2 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 font-medium text-center text-xs';
+      if (btnMapModeAll) btnMapModeAll.className = currentFilterMode === 'all' ? mapActive : mapInactive;
+      if (btnMapModeOccupied) btnMapModeOccupied.className = currentFilterMode === 'occupied' ? mapActive : mapInactive;
+      if (btnMapModeSafe) btnMapModeSafe.className = currentFilterMode === 'safe' ? mapActive : mapInactive;
+      btnMapModeMixed.className = (currentFilterMode === 'mixed' ? mapActive : mapInactive) + (grouped ? '' : ' hidden');
+
+    }
+
+    // ===== FILTERING =====
+    function matchesLocation(item) {
+      const oblast = selectOblast.value;
+      const raion = selectRaion.value;
+      const hromada = selectHromada.value;
+      const hromadaKatottg = hromada && hromada === hierState.hromada &&
+        oblast === hierState.oblast && raion === hierState.raion ? hierState.hromadaKatottg : null;
+      const name = item.name_ua || item.name;
+      if (oblast && (item.admin_level === 1 ? name : item.region_name) !== oblast) return false;
+      if (raion && (item.admin_level === 2 ? name : item.raion_name) !== raion) return false;
+      if (hromada && (item.admin_level === 3 ? name : item.hromada_name) !== hromada) return false;
+      if (hromadaKatottg && getHierarchyAncestor(item, 3)?.katottg !== hromadaKatottg) return false;
+      return true;
+    }
+
+    function applyFilters() {
+      syncViewLevel();
+      if (selectLevel.value === '4' && currentFilterMode === 'mixed') currentFilterMode = 'all';
+      updateFilterModeUI();
+      const pool = allData.filter(item => matchesLocation(item) && matchesSearch(item) &&
+        (selectLevel.value === 'all' || String(item.admin_level) === selectLevel.value) &&
+        passesRegistryFilter(item));
+      filteredData = pool.filter(item => passesBasicFilters(item));
+      filteredKatottgCodes = new Set(filteredData.map(item => item.katottg));
+
+      currentPage = 1;
+      renderTable();
+      let candidates = pool;
+      if (currentView === 'hierarchy') {
+        renderHierarchy();
+        candidates = getHierItems('all', 'all').filter(matchesSearch);
+      }
+      const count = currentView === 'hierarchy' ? hierarchyVisibleItems.length : filteredData.length;
+      lblFilteredCount.textContent = count.toLocaleString('uk-UA');
+      document.getElementById('lblResultUnit').textContent = getResultUnit(count);
+      badgeCountAll.textContent = candidates.length.toLocaleString('uk-UA');
+      badgeCountOccupied.textContent = candidates.filter(item => getFilterGroup(item) === 'occupied').length.toLocaleString('uk-UA');
+      badgeCountSafe.textContent = candidates.filter(item => getFilterGroup(item) === 'safe').length.toLocaleString('uk-UA');
+      badgeCountMixed.textContent = candidates.filter(item => getFilterGroup(item) === 'mixed').length.toLocaleString('uk-UA');
+      btnFilterModeAll.title = 'Усі результати поточного рівня, локації та пошуку';
+      btnFilterModeOccupied.title = 'Усі населені пункти території мають статус ТОТ або бойових дій';
+      btnFilterModeSafe.title = 'Усі населені пункти території під контролем України';
+      btnFilterModeMixed.title = 'Є і контрольовані, і зачеплені населені пункти';
+      lblMapModeHint.textContent = `Знайдено: ${count.toLocaleString('uk-UA')} ${document.getElementById('lblResultUnit').textContent}`;
+      btnExportCsv.title = 'Завантажити поточні результати у CSV';
+      btnExportCsv.disabled = count === 0;
+      btnExportCsv.classList.toggle('opacity-40', count === 0);
+      updateFilterSummary();
+      renderMapSearchResults();
+      if (mapInstance && mapLayers[currentMapLevel]) updateMapFilter();
+      syncUrlState();
+    }
+
+    // ===== FILTER LISTENERS =====
+    filterSearchInput.addEventListener('input', () => { btnClearSearchInput.classList.toggle('hidden', !filterSearchInput.value); applyFilters(); });
+    btnClearSearchInput.addEventListener('click', () => { clearSharedSearch(); applyFilters(); });
+
+    if (btnFilterModeAll) btnFilterModeAll.addEventListener('click', () => setFilterMode('all'));
+    if (btnFilterModeOccupied) btnFilterModeOccupied.addEventListener('click', () => setFilterMode('occupied'));
+    if (btnFilterModeSafe) btnFilterModeSafe.addEventListener('click', () => setFilterMode('safe'));
+    btnFilterModeMixed.addEventListener('click', () => setFilterMode('mixed'));
+    if (btnRemoveTotFilter) btnRemoveTotFilter.addEventListener('click', () => setFilterMode('all'));
+
+    if (btnMapModeAll) btnMapModeAll.addEventListener('click', () => setFilterMode('all'));
+    if (btnMapModeOccupied) btnMapModeOccupied.addEventListener('click', () => setFilterMode('occupied'));
+    if (btnMapModeSafe) btnMapModeSafe.addEventListener('click', () => setFilterMode('safe'));
+    btnMapModeMixed.addEventListener('click', () => setFilterMode('mixed'));
+
+    selectLevel.addEventListener('change', applyFilters);
+    selectStatusCategory.addEventListener('change', () => {
+      const cat = selectStatusCategory.value;
+      if (cat === 'safe') {
+        setFilterMode('safe', false);
+      } else setFilterMode('all', false);
+      applyFilters();
+    });
+    selectRegistries.addEventListener('change', applyFilters);
+
+    btnResetFilters.addEventListener('click', () => {
+      clearSharedSearch();
+      setFilterMode('all', false);
+      selectLevel.value = '4';
+      selectStatusCategory.value = 'all'; selectRegistries.value = 'all';
+      selectOblast.value = ''; selectRaion.value = ''; selectHromada.value = '';
+      geoSepRaion.classList.add('hidden'); selectRaion.classList.add('hidden');
+      geoSepHromada.classList.add('hidden'); selectHromada.classList.add('hidden');
+      hierState = { level: 1, oblast: null, raion: null, hromada: null, hromadaKatottg: null, _isSpecialCity: false };
+      applyFilters();
+    });
+
+    selectPageSize.addEventListener('change', () => { pageSize = Number(selectPageSize.value); currentPage = 1; renderTable(); });
+    btnPrevPage.addEventListener('click', () => { if (currentPage > 1) { currentPage--; renderTable(); } });
+    btnNextPage.addEventListener('click', () => { const mx = Math.ceil(filteredData.length / pageSize) || 1; if (currentPage < mx) { currentPage++; renderTable(); } });
+
+    // ===== TABLE RENDER =====
+    function renderTable() {
+      const total = filteredData.length;
+      const totalPages = Math.ceil(total / pageSize) || 1;
+      if (currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * pageSize;
+      const end = Math.min(start + pageSize, total);
+      const items = filteredData.slice(start, end);
+
+      lblTotalItems.textContent = total.toLocaleString('uk-UA');
+      lblPageRange.textContent = total > 0 ? (start + 1).toLocaleString('uk-UA') + '–' + end.toLocaleString('uk-UA') : '0–0';
+      lblCurrentPage.textContent = currentPage;
+      lblTotalPages.textContent = totalPages;
+      btnPrevPage.disabled = currentPage <= 1;
+      btnNextPage.disabled = currentPage >= totalPages;
+
+      tableBody.innerHTML = '';
+      if (!items.length) { tableEmptyState.classList.remove('hidden'); return; }
+      tableEmptyState.classList.add('hidden');
+
+      items.forEach((item, i) => {
+        const tr = document.createElement('tr');
+        tr.className = i % 2 === 0 ? 'bg-white hover:bg-slate-50 transition-colors' : 'bg-slate-50/50 hover:bg-slate-100/60 transition-colors';
+        const name = item.name_ua || item.name || 'Без назви';
+        const cat = item.category_name || item.category || "Об'єкт";
+        const hierarchy = [item.region_name, item.raion_name, item.hromada_name].filter(Boolean).join(' › ') || 'Україна';
+        const katottg = item.katottg || '—';
+        const key5 = item.katottg_key5 || '—';
+        tr.innerHTML = `
+          <td class="px-3 py-2.5 whitespace-nowrap">
+            <div class="flex items-center gap-1">
+              <span class="font-mono font-bold text-amber-950 bg-amber-50 hover:bg-amber-100 border border-amber-300 px-2 py-1 rounded-md text-xs tracking-wider select-all transition-colors">${key5}</span>
+              <button onclick="copyToClipboard('${key5}')" class="p-1 text-slate-400 hover:text-amber-800 hover:bg-amber-50 rounded" title="Копіювати ID (5 знаків)">
+                <i data-lucide="copy" class="w-3 h-3"></i>
+              </button>
+            </div>
+          </td>
+          <td class="px-4 py-2.5 font-bold text-slate-900">${name}</td>
+          <td class="px-3 py-2.5 whitespace-nowrap">
+            <div class="flex flex-col gap-0.5">
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">Рівень ${item.admin_level}</span>
+              <span class="text-[10px] text-slate-500 font-medium">${cat}</span>
+            </div>
+          </td>
+          <td class="px-3 py-2.5 whitespace-nowrap">
+            <div class="flex items-center space-x-1">
+              <code class="font-mono text-blue-700 font-semibold text-xs">${katottg}</code>
+              <button onclick="copyToClipboard('${katottg}')" class="p-0.5 text-slate-400 hover:text-slate-700" title="Копіювати повний КАТОТТГ"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>
+            </div>
+          </td>
+          <td class="px-3 py-2.5 text-slate-600 font-medium text-[11px] max-w-xs truncate" title="${hierarchy}">${hierarchy}</td>
+          <td class="px-4 py-2.5">${renderStatusBadge(item)}</td>
+          <td class="px-3 py-2.5 text-center text-slate-600 font-mono text-[11px] whitespace-nowrap">${item.date_start || '—'}</td>
+          <td class="px-3 py-2.5 text-center text-slate-600 font-mono text-[11px] whitespace-nowrap">${item.date_end || (item.is_occupied ? 'Триває' : '—')}</td>
+          <td class="px-3 py-2.5 text-center whitespace-nowrap">
+            <span class="text-[11px] font-semibold ${item.systems_active === 'Ні' ? 'text-rose-600' : 'text-emerald-700'}">${item.systems_active || '—'}</span>
+          </td>
+          <td class="px-3 py-2.5 text-center whitespace-nowrap">
+            <div class="flex items-center gap-1 justify-center">
+              <button onclick="showObjectCard('${item.katottg}')" class="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors shadow-2xs">
+                <i data-lucide="square-arrow-out-up-right" class="w-3 h-3 mr-1"></i>Картка
+              </button>
+              <button onclick="showObjectOnMap('${item.katottg}')" class="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors shadow-2xs">
+                <i data-lucide="map-pin" class="w-3 h-3 mr-1"></i>Карта
+              </button>
+            </div>
+          </td>`;
+        tableBody.appendChild(tr);
+      });
+      lucide.createIcons();
+    }
+
+    // ===== HIERARCHY VIEW =====
+    const HIER_LEVEL_NAMES = { 1: 'Регіони', 2: 'Райони', 3: 'Громади', 4: 'Населені пункти' };
+    const HIER_ICONS = { 1: 'map', 2: 'landmark', 3: 'building-2', 4: 'home' };
+
+    function getFilterGroup(item) {
+      return getSettlementSummary(item)?.group || (StatusSummary.rawCategory(item) === 'safe' ? 'safe' : 'occupied');
+    }
+
+    function passesRegistryFilter(item) {
+      const regs = selectRegistries.value;
+      if (regs === 'all') return true;
+      const summary = getSettlementSummary(item);
+      return summary ? summary.registries[regs] > 0 : item.systems_active === (regs === 'yes' ? 'Так' : 'Ні');
+    }
+
+    function passesBasicFilters(item, mode = currentFilterMode, statusCat = selectStatusCategory.value) {
+      if (mode !== 'all' && getFilterGroup(item) !== mode) return false;
+      const summary = getSettlementSummary(item);
+      if (statusCat !== 'all' && (summary ? !summary.counts[statusCat] : getStatusCategory(item) !== statusCat)) return false;
+      return passesRegistryFilter(item);
+    }
+
+    function getHierarchyAncestor(item, level) {
+      let ancestor = item;
+      const visited = new Set();
+      while (ancestor && ancestor.admin_level > level && !visited.has(ancestor.katottg)) {
+        visited.add(ancestor.katottg);
+        ancestor = allDataByKatottg.get(ancestor.parent_katottg);
+      }
+      if (ancestor && ancestor.admin_level === level) return ancestor;
+
+      const name = item[{ 1: 'region_name', 2: 'raion_name', 3: 'hromada_name' }[level]];
+      const matches = allData.filter(x => x.admin_level === level &&
+        (x.name_ua || x.name) === name &&
+        (level === 1 || x.region_name === item.region_name) &&
+        (level < 3 || x.raion_name === item.raion_name));
+      return matches.length === 1 ? matches[0] : null;
+    }
+
+    function buildGroupStats(items, mode = currentFilterMode, statusCat = selectStatusCategory.value) {
+      return items.filter(item => passesBasicFilters(item, mode, statusCat)).map(item => {
+        const summary = getSettlementSummary(item);
+        return { ...item, name: item.name_ua || item.name,
+          total: summary?.total || 0, occupied: summary?.affected || 0, statusCounts: summary?.counts || {} };
+      }).sort((a, b) => a.name.localeCompare(b.name, 'uk'));
+    }
+
+    function isSpecialCityOblast(oblastName) {
+      // Cities with special status (Kyiv, Sevastopol) have level-4 children directly
+      // under the oblast with empty raion_name — detect this case
+      const hasRaions = allData.some(x => x.region_name === oblastName && x.raion_name);
+      const hasDirectDistricts = allData.some(x => x.region_name === oblastName && !x.raion_name && x.admin_level === 4);
+      return !hasRaions && hasDirectDistricts;
+    }
+
+    function getHierItems(mode = currentFilterMode, statusCat = selectStatusCategory.value) {
+      if (hierState.level === 1) {
+        const base = allData.filter(x => x.admin_level === 1);
+        return buildGroupStats(base, mode, statusCat);
+      }
+      if (hierState.level === 2) {
+        // Special case: cities with special status (Kyiv, Sevastopol) have districts
+        // directly at level 4 with empty raion_name — show them as leaf nodes
+        if (isSpecialCityOblast(hierState.oblast)) {
+          hierState._isSpecialCity = true;
+          return allData.filter(x =>
+            x.region_name === hierState.oblast &&
+            !x.raion_name &&
+            x.admin_level === 4 &&
+            passesBasicFilters(x, mode, statusCat)
+          ).sort((a, b) => (a.name_ua || a.name || '').localeCompare(b.name_ua || b.name || '', 'uk'));
+        }
+        hierState._isSpecialCity = false;
+        const base = allData.filter(x => x.admin_level === 2 && x.region_name === hierState.oblast);
+        return buildGroupStats(base, mode, statusCat);
+      }
+      if (hierState.level === 3) {
+        const base = allData.filter(x => x.admin_level === 3 && x.region_name === hierState.oblast && x.raion_name === hierState.raion);
+        return buildGroupStats(base, mode, statusCat);
+      }
+      if (hierState.level === 4) {
+        return allData.filter(x =>
+          x.admin_level === 4 &&
+          x.region_name === hierState.oblast &&
+          x.raion_name === hierState.raion &&
+          x.hromada_name === hierState.hromada &&
+          (!hierState.hromadaKatottg || getHierarchyAncestor(x, 3)?.katottg === hierState.hromadaKatottg) &&
+          passesBasicFilters(x, mode, statusCat)
+        ).sort((a, b) => (a.name_ua || a.name || '').localeCompare(b.name_ua || b.name || '', 'uk'));
+      }
+      return [];
+    }
+
+    function renderHierarchyBreadcrumb() {
+      // For special-status cities (Kyiv, Sevastopol), districts are shown directly at level 2
+      const levelLabel = (hierState.level === 2 && hierState._isSpecialCity)
+        ? 'Райони міста'
+        : (HIER_LEVEL_NAMES[hierState.level] || hierState.level);
+      hierLevelBadge.textContent = 'Рівень: ' + levelLabel;
+      hierBreadcrumbPath.innerHTML = '';
+      const crumbs = [];
+      if (hierState.oblast) crumbs.push({ label: hierState.oblast, level: 1 });
+      if (hierState.raion) crumbs.push({ label: hierState.raion, level: 2 });
+      if (hierState.hromada) crumbs.push({ label: hierState.hromada, level: 3 });
+
+      crumbs.forEach((c, idx) => {
+        const sep = document.createElement('span');
+        sep.className = 'text-slate-400 font-bold mx-1'; sep.textContent = '›';
+        hierBreadcrumbPath.appendChild(sep);
+        const isLast = idx === crumbs.length - 1;
+        if (isLast) {
+          const span = document.createElement('span');
+          span.className = 'font-bold text-slate-900'; span.textContent = c.label;
+          hierBreadcrumbPath.appendChild(span);
+        } else {
+          const btn = document.createElement('button');
+          btn.className = 'font-semibold text-blue-700 hover:underline'; btn.textContent = c.label;
+          const lvl = c.level;
+          btn.onclick = () => {
+            navigateHierarchy(lvl + 1, hierState.oblast, lvl >= 2 ? hierState.raion : null);
+          };
+          hierBreadcrumbPath.appendChild(btn);
+        }
+      });
+    }
+
+    document.getElementById('hierBreadcrumbRoot').addEventListener('click', () => {
+      navigateHierarchy(1);
+    });
+
+    function renderHierarchy() {
+      const items = getHierItems().filter(matchesSearch);
+      renderHierarchyBreadcrumb();
+      hierarchyVisibleItems = items;
+      hierGrid.innerHTML = '';
+      if (!items.length) { hierEmpty.classList.remove('hidden'); hierGrid.classList.add('hidden'); return; }
+      hierEmpty.classList.add('hidden'); hierGrid.classList.remove('hidden');
+
+      // Leaf view: either at level 4, or at level 2 in a special-status city (Kyiv, Sevastopol)
+      const isLeaf = hierState.level === 4 || (hierState.level === 2 && hierState._isSpecialCity);
+
+      items.forEach(item => {
+        const div = document.createElement('div');
+
+        if (isLeaf) {
+          const cat = getStatusCategory(item);
+          const style = getStatusCardStyle(cat);
+          const name = item.name_ua || item.name || 'Без назви';
+          const katottg = item.katottg || '—';
+          const statusTxt = item.status || 'Під контролем України';
+          const borderAccent = item.is_occupied ? (cat === 'occupied' ? 'border-l-4 border-l-rose-500' : cat === 'active' ? 'border-l-4 border-l-orange-500' : 'border-l-4 border-l-amber-500') : '';
+
+          div.className = `hier-card hier-leaf bg-white rounded-xl border border-slate-200 p-3 flex flex-col gap-1.5 ${borderAccent}`;
+          div.innerHTML = `
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 flex-1 min-w-0">
+                <div class="hier-card-name font-bold text-slate-900 text-sm leading-snug">${name}</div>
+                <div class="text-[11px] text-slate-500">${item.category_name || 'Населений пункт'}</div>
+              </div>
+              ${item.is_occupied ? `<div class="w-2.5 h-2.5 rounded-full ${style.dot} flex-shrink-0 mt-1"></div>` : ''}
+            </div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="font-mono font-bold text-amber-950 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded text-[10px]" title="5-значний ID">ID: ${item.katottg_key5 || '—'}</span>
+              <code class="text-[11px] font-mono text-blue-600 font-semibold">${katottg}</code>
+              <button onclick="event.stopPropagation(); copyToClipboard('${katottg}')" class="p-1 text-slate-400 hover:text-slate-700 rounded hover:bg-slate-100" title="Копіювати КАТОТТГ" aria-label="Копіювати КАТОТТГ"><i data-lucide="copy" class="w-3 h-3"></i></button>
+            </div>
+            <div class="mt-auto flex flex-wrap items-end justify-between gap-x-2 gap-y-1.5">
+              <div class="flex-1 min-w-[140px] space-y-1">
+                <div class="hier-status">${renderStatusBadge(item)}</div>
+                ${item.is_occupied && item.date_start ? `<div class="text-[10px] text-slate-500 font-medium">Термін: <strong>${item.date_start}</strong>${item.date_end ? ' — ' + item.date_end : ' (триває)'}</div>` : ''}
+              </div>
+              <div class="hier-actions flex items-center gap-1.5 flex-shrink-0">
+                <button onclick="event.stopPropagation(); showObjectCard('${item.katottg}')" class="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors">
+                  <i data-lucide="square-arrow-out-up-right" class="w-3.5 h-3.5"></i> Картка
+                </button>
+                <button onclick="event.stopPropagation(); showObjectOnMap('${item.katottg}')" class="inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors">
+                  <i data-lucide="map-pin" class="w-3.5 h-3.5"></i> Карта
+                </button>
+              </div>
+            </div>`;
+
+        } else {
+          const name = item.name;
+          const totalOcc = item.occupied || 0;
+          const totalAll = item.total || 0;
+          const pct = totalAll > 0 ? totalOcc / totalAll * 100 : 0;
+          const counts = item.statusCounts || {};
+          const style = getStatusCardStyle(getStatusCategory(item));
+          const icon = HIER_ICONS[hierState.level + 1] || 'folder';
+
+          div.className = 'hier-card hier-group bg-white rounded-xl border border-slate-200 p-3 flex flex-col gap-2 cursor-pointer hover:border-blue-400';
+          div.setAttribute('role', 'group');
+          div.setAttribute('aria-label', name);
+          if (item.katottg) div.dataset.katottg = item.katottg;
+          div.innerHTML = `
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                <i data-lucide="${icon}" class="w-5 h-5 text-slate-500"></i>
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="hier-card-name font-bold text-slate-900 text-sm leading-snug">${name}</div>
+                <div class="text-[11px] text-slate-500">${totalAll.toLocaleString('uk-UA')} ${getSettlementSummary(item) ? StatusSummary.unit(getSettlementSummary(item), totalAll) : 'населених пунктів'}</div>
+              </div>
+              ${totalOcc > 0 ? `<div class="w-2.5 h-2.5 rounded-full ${style.dot} flex-shrink-0"></div>` : ''}
+            </div>
+            ${totalOcc > 0 ? `
+            <div class="space-y-0.5 text-[11px]">
+              ${counts.occupied ? `<div class="flex justify-between"><span class="text-rose-700 font-semibold">● Тимчасово окуповані</span><span class="font-bold text-rose-800">${counts.occupied.toLocaleString('uk-UA')}</span></div>` : ''}
+              ${counts.active ? `<div class="flex justify-between"><span class="text-orange-700 font-semibold">● Активні бойові дії</span><span class="font-bold text-orange-800">${counts.active.toLocaleString('uk-UA')}</span></div>` : ''}
+              ${counts.possible ? `<div class="flex justify-between"><span class="text-amber-700 font-semibold">● Можливі бойові дії</span><span class="font-bold text-amber-800">${counts.possible.toLocaleString('uk-UA')}</span></div>` : ''}
+              ${counts.safe ? `<div class="flex justify-between"><span class="text-emerald-700 font-semibold">● Під контролем України</span><span class="font-bold text-emerald-800">${counts.safe.toLocaleString('uk-UA')}</span></div>` : ''}
+            </div>` : `<div class="text-[11px] text-emerald-700 font-semibold">✓ Під контролем України</div>`}
+            <div class="hier-group-footer mt-auto flex flex-col gap-2">
+              <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
+                ${totalOcc > 0 ? `<div class="text-[11px] text-slate-500">${getStandardStatusText(item)}</div>` : '<span></span>'}
+                <div class="hier-actions flex items-center gap-1.5 ml-auto">
+                  ${item.katottg ? `<button type="button" class="hier-group-card inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors"><i data-lucide="square-arrow-out-up-right" class="w-3.5 h-3.5"></i> Картка</button>` : ''}
+                  <button type="button" class="hier-group-drill text-xs font-semibold text-blue-600 whitespace-nowrap rounded px-1 hover:bg-blue-50">Перейти →</button>
+                </div>
+              </div>
+              ${totalOcc > 0 ? `<div class="bg-slate-100 rounded-full h-1.5 overflow-hidden"><div class="h-full ${style.bar} transition-all" style="width:${pct}%"></div></div>` : '<div class="h-1.5" aria-hidden="true"></div>'}
+            </div>`;
+
+          const cardButton = div.querySelector('.hier-group-card');
+          if (cardButton) {
+            cardButton.setAttribute('aria-label', `Відкрити картку: ${name} (${item.katottg})`);
+            cardButton.title = `Картка КАТОТТГ ${item.katottg}`;
+            cardButton.addEventListener('click', event => {
+              event.stopPropagation();
+              showObjectCard(item.katottg);
+            });
+          }
+          div.querySelector('.hier-group-drill').setAttribute('aria-label', `Перейти: ${name}`);
+
+          div.addEventListener('click', () => {
+            if (hierState.level === 1) {
+              navigateHierarchy(2, name);
+            } else if (hierState.level === 2) {
+              navigateHierarchy(3, hierState.oblast, name);
+            } else if (hierState.level === 3) {
+              navigateHierarchy(4, hierState.oblast, hierState.raion, name, item.katottg);
+            }
+          });
+        }
+
+        hierGrid.appendChild(div);
+      });
+      lucide.createIcons();
+    }
+
+    // ===== CSV EXPORT =====
+    function buildCurrentCsv() {
+      const source = currentView === 'hierarchy' ? hierarchyVisibleItems : filteredData;
+      if (!source.length) return null;
+      const isGroup = currentView === 'hierarchy' && !(hierState.level === 4 || hierState._isSpecialCity);
+      const h = isGroup
+        ? ['Назва', 'Рівень', 'Код КАТОТТГ', 'Населених пунктів / районів міста (рівень 4)', 'Окуповані', 'Активні бойові дії', 'Можливі бойові дії', 'Під контролем України']
+        : ['ID (5 знаків)', 'Назва', 'Рівень', 'Категорія', 'Код КАТОТТГ (19 знаків)', 'Область', 'Район', 'Громада', 'Статус', 'Дата початку', 'Дата завершення', 'Системи діють'];
+      const rows = source.map(it => isGroup ? [
+        `"${(it.name || '').replace(/"/g, '""')}"`, hierState.level, `"${it.katottg || ''}"`, it.total,
+        it.statusCounts.occupied || 0, it.statusCounts.active || 0, it.statusCounts.possible || 0, it.statusCounts.safe || 0
+      ] : [
+        `"${it.katottg_key5 || ''}"`,
+        `"${(it.name_ua || it.name || '').replace(/"/g, '""')}"`, it.admin_level,
+        `"${(it.category_name || '').replace(/"/g, '""')}"`, `"${it.katottg || ''}"`,
+        `"${(it.region_name || '').replace(/"/g, '""')}"`, `"${(it.raion_name || '').replace(/"/g, '""')}"`,
+        `"${(it.hromada_name || '').replace(/"/g, '""')}"`, `"${getStandardStatusText(it).replace(/"/g, '""')}"`,
+        `"${it.date_start || ''}"`, `"${it.date_end || ''}"`, `"${it.systems_active || ''}"`
+      ]);
+      return '\uFEFF' + [h.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
+    }
+
+    btnExportCsv.addEventListener('click', () => {
+      const csv = buildCurrentCsv();
+      if (!csv) return;
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'katottg_' + new Date().toISOString().slice(0, 10) + '.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    window.copyToClipboard = async function (text, message) {
+      if (!text || text === '—') return;
+      let copied = false;
+      try { await navigator.clipboard.writeText(text); copied = true; } catch {
+        const field = document.createElement('textarea');
+        field.value = text; field.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0';
+        document.body.appendChild(field); field.select();
+        try { copied = document.execCommand('copy'); } catch { copied = false; }
+        field.remove();
+      }
+      if (!copied) {
+        document.getElementById('copyFallbackDialog')?.remove();
+        const dialog = document.createElement('dialog'); dialog.id = 'copyFallbackDialog';
+        dialog.className = 'p-5 rounded-2xl border border-slate-200 shadow-xl w-[min(92vw,560px)] text-sm text-slate-700';
+        dialog.setAttribute('aria-label', 'Копіювання');
+        const label = document.createElement('p'); label.textContent = 'Натисніть Ctrl+C, щоб скопіювати виділений текст.';
+        const field = document.createElement('input'); field.id = 'copyFallbackText'; field.readOnly = true; field.value = text;
+        field.setAttribute('aria-label', 'Текст для копіювання'); field.className = 'w-full my-3 px-3 py-2 border border-slate-300 rounded-lg text-xs';
+        const close = document.createElement('button'); close.textContent = 'Закрити'; close.className = 'px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold';
+        close.onclick = () => { dialog.close(); dialog.remove(); };
+        dialog.append(label, field, close); document.body.appendChild(dialog); dialog.showModal(); field.select();
+        return;
+      }
+      const t = document.createElement('div');
+      t.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs font-semibold px-4 py-2 rounded-full shadow-lg z-[999]';
+      t.textContent = message || 'Скопійовано: ' + text;
+      document.body.appendChild(t);
+      setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; setTimeout(() => { if (t.parentNode) document.body.removeChild(t); }, 350); }, 2000);
+    };
+
+    // ===== MAP =====
+    function initMapIfNeeded(level = 1) {
+      if (mapInitialized) return;
+      mapInitialized = true;
+      mapInstance = L.map('map', { zoomControl: false, attributionControl: false }).setView([48.3794, 31.1656], 6);
+      L.control.zoom({ position: 'bottomright' }).addTo(mapInstance);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(mapInstance);
+      mapLoadPromise = loadMapLevel(level);
+      document.querySelectorAll('.map-level-btn').forEach(btn => {
+        btn.addEventListener('click', () => loadMapLevel(Number(btn.getAttribute('data-map-level'))));
+      });
+      // Map mode buttons are already wired to setFilterMode()
+    }
+
+    function getMapStyle(feature) {
+      const p = feature.properties || {};
+      const live = getLiveItem(p);
+      const lvl = currentMapLevel;
+
+      if (!filteredKatottgCodes.has(live?.katottg || p.katottg)) {
+        return { fillColor: '#e2e8f0', weight: 0.6, opacity: 0.25, color: '#94a3b8', fillOpacity: 0.04 };
+      }
+
+      const activeObj = live || p;
+      const isOcc = getFilterGroup(activeObj) !== 'safe';
+      const cat = getStatusCategory(activeObj);
+      const cols = { mixed: '#8b5cf6', safe: '#10b981', possible: '#f59e0b', active: '#f97316', occupied: '#ef4444' };
+      const strokes = { mixed: '#7c3aed', safe: '#059669', possible: '#d97706', active: '#ea580c', occupied: '#dc2626' };
+
+      return {
+        fillColor: cols[cat] || cols.safe,
+        weight: lvl === 1 ? 2.5 : lvl === 2 ? 1.8 : 1.2,
+        opacity: 0.95,
+        color: strokes[cat] || strokes.safe,
+        fillOpacity: isOcc ? 0.65 : 0.35
+      };
+    }
+
+    async function loadMapLevel(level) {
+      currentMapLevel = level;
+      if (currentView === 'map') applyFilters();
+      showLoader('Завантаження карти...', 'Рівень ' + level);
+      [1, 2, 3, 4].forEach(l => { if (mapLayers[l] && mapInstance.hasLayer(mapLayers[l])) mapInstance.removeLayer(mapLayers[l]); });
+      document.querySelectorAll('.map-level-btn').forEach(btn => {
+        const l = Number(btn.getAttribute('data-map-level'));
+        btn.className = 'map-level-btn w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors ' + (l === level ? 'bg-blue-600 text-white font-semibold shadow-xs' : 'text-slate-700 hover:bg-slate-100');
+      });
+      const names = { 1: 'Регіони', 2: 'Райони', 3: 'Громади', 4: 'Населені пункти' };
+      document.getElementById('mapActiveLevelBadge').textContent = names[level] || 'Рівень ' + level;
+      try {
+        if (!mapLayers[level]) {
+          const resp = await fetch('data_files/ukr_admin' + level + '.geojson');
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const geojson = await resp.json();
+          mapLayers[level] = L.geoJSON(geojson, {
+            style: getMapStyle,
+            onEachFeature: (feature, layer) => {
+              layer.on({
+                mouseover: e => { e.target.setStyle({ weight: 3, color: '#1d4ed8', fillOpacity: 0.85 }); e.target.bringToFront(); },
+                mouseout: e => { mapLayers[level].resetStyle(e.target); },
+                click: e => { showMapFeatureDetails(e.target.feature); }
+              });
+            }
+          });
+        }
+        if (currentMapLevel !== level) return;
+        mapLayers[level].addTo(mapInstance);
+        updateMapFilter();
+      } catch (err) { console.error(err); } finally { hideLoader(); }
+    }
+
+    function updateMapFilter() { if (mapLayers[currentMapLevel]) mapLayers[currentMapLevel].setStyle(getMapStyle); }
+
+    const mapSidebar = document.getElementById('mapObjectSidebar');
+    function showMapFeatureDetails(feature) {
+      const p = feature.properties || {};
+      const live = getLiveItem(p);
+      const activeObj = live || p;
+      const isOcc = getFilterGroup(activeObj) !== 'safe';
+      currentMapObjectKatottg = activeObj.katottg || null;
+
+      const name = activeObj.name_ua || activeObj.name || p.name_ua || p.adm4_name1 || p.adm3_name1 || p.adm2_name1 || p.adm1_name1 || 'Без назви';
+      const lvl = activeObj.admin_level || p.admin_level || currentMapLevel;
+      const cat = getRecordCategory(activeObj);
+
+      document.getElementById('mapDetailTitle').textContent = name;
+      document.getElementById('mapDetailCategory').textContent = cat;
+      document.getElementById('mapDetailBadge').textContent = 'Рівень ' + lvl;
+      document.getElementById('mapDetailStatusText').textContent = getStandardStatusText(activeObj);
+      const catStatus = getStatusCategory(activeObj);
+      const banner = document.getElementById('mapDetailStatusBanner');
+      banner.className = 'p-3 rounded-xl flex items-center gap-2.5 font-semibold text-xs border';
+      const bannerStyles = { mixed: 'bg-violet-50 text-violet-900 border-violet-200', safe: 'bg-emerald-50 text-emerald-900 border-emerald-200', possible: 'bg-amber-50 text-amber-900 border-amber-200', active: 'bg-orange-50 text-orange-900 border-orange-200', occupied: 'bg-rose-50 text-rose-900 border-rose-200' };
+      banner.classList.add(...(bannerStyles[catStatus] || bannerStyles.safe).split(' '));
+      const detailIcon = banner.querySelector('svg, i');
+      if (detailIcon) { const icon = document.createElement('i'); icon.setAttribute('data-lucide', catStatus === 'mixed' ? 'layers' : catStatus === 'safe' ? 'shield-check' : 'shield-alert'); icon.className = 'w-5 h-5 flex-shrink-0'; detailIcon.replaceWith(icon); }
+      renderSummaryBreakdown(document.getElementById('mapDetailStatusBreakdown'), activeObj);
+      document.getElementById('mapValRegion').textContent = activeObj.region_name || p.region_name || p.adm1_name1 || '—';
+      document.getElementById('mapValRaion').textContent = activeObj.raion_name || p.raion_name || p.adm2_name1 || '—';
+      document.getElementById('mapValHromada').textContent = activeObj.hromada_name || p.hromada_name || p.adm3_name1 || '—';
+      document.getElementById('mapValKatottg').textContent = activeObj.katottg || p.katottg || '—';
+      document.getElementById('mapValKey5').textContent = activeObj.katottg_key5 || p.katottg_key5 || '—';
+      const orderBox = document.getElementById('mapDetailOrderBox');
+      if (isOcc && (activeObj.date_start || activeObj.systems_active)) {
+        document.getElementById('mapValDateStart').textContent = activeObj.date_start || 'Не вказано';
+        document.getElementById('mapValDateEnd').textContent = activeObj.date_end || 'Триває';
+        document.getElementById('mapValSystems').textContent = activeObj.systems_active || 'Так';
+        orderBox.classList.remove('hidden');
+      } else { orderBox.classList.add('hidden'); }
+      mapSidebar.classList.remove('hidden');
+      lucide.createIcons();
+      syncUrlState();
+    }
+
+    document.getElementById('btnMapCloseSidebar').addEventListener('click', () => { mapSidebar.classList.add('hidden'); currentMapObjectKatottg = null; syncUrlState(); });
+
+    let mapSingleHighlightLayer = null;
+    window.showObjectOnMap = async function (katottgCode) {
+      if (currentView !== 'map') switchView('map');
+      if (mapLoadPromise) await mapLoadPromise;
+      const item = allData.find(d => d.katottg === katottgCode);
+      if (!item) return;
+      const lvl = item.admin_level || 4;
+
+      if (mapSingleHighlightLayer && mapInstance.hasLayer(mapSingleHighlightLayer)) {
+        mapInstance.removeLayer(mapSingleHighlightLayer);
+        mapSingleHighlightLayer = null;
+      }
+
+      // If settlement (lvl 4), load Gromadas as context, fetch single polygon and highlight directly
+      const bgLevel = lvl === 4 ? 3 : lvl;
+      await loadMapLevel(bgLevel);
+
+      let targetFeature = null;
+      if (lvl === 4) {
+        // Fast path: fetch single settlement from fast chunk or main geojson
+        const oblPcode = (item.pcode_prefix || item.katottg || '').slice(0, 4);
+        let geo = null;
+        if (oblPcode) {
+          try { geo = await getGeoJsonData('admin4_by_oblast/' + oblPcode); } catch (e) { }
+        }
+        if (!geo) { geo = await getGeoJsonData(4); }
+        targetFeature = geo && geo.features ? geo.features.find(f => f.properties && f.properties.katottg === katottgCode) : null;
+      } else if (mapLayers[lvl]) {
+        mapLayers[lvl].eachLayer(l => {
+          if (l.feature && l.feature.properties && l.feature.properties.katottg === katottgCode) {
+            targetFeature = l.feature;
+          }
+        });
+      }
+
+      if (targetFeature) {
+        showMapFeatureDetails(targetFeature);
+        const cat = getStatusCategory(item);
+        const cols = { mixed: '#8b5cf6', safe: '#10b981', possible: '#f59e0b', active: '#f97316', occupied: '#ef4444' };
+        mapSingleHighlightLayer = L.geoJSON(targetFeature, {
+          style: { weight: 4.5, color: '#1d4ed8', fillColor: cols[cat] || '#ef4444', fillOpacity: 0.85 }
+        }).addTo(mapInstance);
+        mapInstance.fitBounds(mapSingleHighlightLayer.getBounds(), { maxZoom: 13, padding: [60, 60] });
+      }
+    };
+
+    // ===== OBJECT CARD MODAL =====
+    let objCardMapInstance = null;
+    let objCardLayer = null;
+    let currentCardKatottg = null;
+    const geoJsonCache = {};
+
+    const objectCardModal = document.getElementById('objectCardModal');
+    document.getElementById('btnCloseObjectCard').addEventListener('click', closeObjectCard);
+    objectCardModal.addEventListener('click', e => { if (e.target === objectCardModal) closeObjectCard(); });
+
+    function closeObjectCard() {
+      objectCardModal.classList.add('hidden');
+      currentCardKatottg = null;
+      syncUrlState();
+      if (objCardLayer && objCardMapInstance) {
+        objCardMapInstance.removeLayer(objCardLayer);
+        objCardLayer = null;
+      }
+    }
+
+    async function getGeoJsonData(key) {
+      if (!geoJsonCache[key]) {
+        let url = '';
+        if (typeof key === 'string' && (key.includes('/') || key.endsWith('.json') || key.endsWith('.geojson'))) {
+          url = 'data_files/' + key + (key.endsWith('.json') || key.endsWith('.geojson') ? '' : '.json');
+        } else {
+          url = 'data_files/ukr_admin' + key + '.geojson';
+        }
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status + ' for ' + url);
+        geoJsonCache[key] = await resp.json();
+      }
+      return geoJsonCache[key];
+    }
+
+    function getPlural(n, one, few, many) {
+      const mod10 = n % 10;
+      const mod100 = n % 100;
+      if (mod100 >= 11 && mod100 <= 19) return many;
+      if (mod10 === 1) return one;
+      if (mod10 >= 2 && mod10 <= 4) return few;
+      return many;
+    }
+
+    window.showObjectCard = function (katottgCode) {
+      const item = allData.find(d => d.katottg === katottgCode);
+      if (!item) return;
+      currentCardKatottg = katottgCode;
+      const summary = getSettlementSummary(item);
+
+      const name = item.name_ua || item.name || 'Без назви';
+      const cat = getStatusCategory(item);
+      const style = getStatusCardStyle(cat);
+
+      // Header info
+      document.getElementById('objCardTitle').textContent = name;
+      document.getElementById('objCardIdBadge').textContent = 'ID: ' + (item.katottg_key5 || '—');
+      document.getElementById('objCardLevelBadge').textContent = 'Рівень ' + item.admin_level;
+      document.getElementById('objCardCategoryBadge').textContent = getRecordCategory(item);
+      const hierPath = [item.region_name, item.raion_name, item.hromada_name].filter(Boolean).join(' › ');
+      document.getElementById('objCardHierarchySubtitle').textContent = hierPath || 'Україна';
+
+      // Status dot and banner
+      const dotEl = document.getElementById('objCardStatusDot');
+      dotEl.className = 'w-3.5 h-3.5 rounded-full mt-1 flex-shrink-0 ' + style.dot;
+
+      const statusBanner = document.getElementById('objCardStatusBanner');
+      statusBanner.className = 'mt-3 px-3 py-2 rounded-xl flex items-center gap-2.5 text-xs font-semibold border ';
+      const bannerStyles = {
+        mixed: 'bg-violet-50 text-violet-900 border-violet-200',
+        safe: 'bg-emerald-50 text-emerald-900 border-emerald-200',
+        possible: 'bg-amber-50 text-amber-900 border-amber-200',
+        active: 'bg-orange-50 text-orange-900 border-orange-200',
+        occupied: 'bg-rose-50 text-rose-900 border-rose-200'
+      };
+      statusBanner.className += (bannerStyles[cat] || bannerStyles.safe);
+      document.getElementById('objCardStatusText').textContent = getStandardStatusText(item);
+
+      // Status icon
+      const iconMap = { mixed: 'layers', safe: 'shield-check', possible: 'alert-triangle', active: 'flame', occupied: 'shield-alert' };
+      const iconEl = document.getElementById('objCardStatusIcon');
+      iconEl.setAttribute('data-lucide', iconMap[cat] || 'shield-check');
+
+      // Map boundary header label
+      document.getElementById('objCardMapBoundaryLabel').textContent = `${name} · ID: ${item.katottg_key5 || '—'}`;
+      const dotMap = document.getElementById('objCardMapDot');
+      dotMap.className = 'w-2.5 h-2.5 rounded-full animate-pulse ' + style.dot;
+
+      // ================= SECTION 1: ІСТОРИЧНІСТЬ =================
+      const histContainer = document.getElementById('objCardHistoryTimeline');
+      histContainer.innerHTML = '';
+      const versionBadge = document.getElementById('objCardVersionBadge');
+
+      const historyList = (item.history && Array.isArray(item.history) && item.history.length > 0) ? item.history : [];
+      const totalVer = item.total_versions || historyList.length || (summary ? 0 : item.is_occupied ? 1 : 0);
+      versionBadge.textContent = totalVer + ' ' + getPlural(totalVer, 'редакція', 'редакції', 'редакцій');
+
+      if (historyList.length > 0) {
+        historyList.forEach((h, idx) => {
+          const isLatest = idx === historyList.length - 1;
+          const div = document.createElement('div');
+          div.className = `relative pl-6 pb-2 border-l-2 ${isLatest ? 'border-blue-500' : 'border-slate-200'} last:pb-0`;
+
+          const dotColor = isLatest ? (item.is_occupied ? 'bg-rose-500 ring-2 ring-rose-200' : 'bg-emerald-500 ring-2 ring-emerald-200') : 'bg-slate-300';
+          const regActive = h.systems_active === 'Так';
+          const regBadge = h.systems_active
+            ? (regActive
+              ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200"><i data-lucide="check" class="w-3 h-3"></i> Реєстри діють</span>`
+              : `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200"><i data-lucide="x" class="w-3 h-3"></i> Реєстри заблоковані</span>`)
+            : '';
+
+          div.innerHTML = `
+            <div class="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${dotColor}"></div>
+            <div class="bg-slate-50/80 hover:bg-slate-100/80 rounded-xl p-2.5 border border-slate-200/80 transition-colors">
+              <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="font-bold text-slate-800 text-[11px] flex items-center gap-1">
+                  ${isLatest ? '<span class="px-1.5 py-0.2 rounded text-[9px] uppercase font-extrabold bg-blue-600 text-white">Актуальна</span>' : ''}
+                  Редакція #${idx + 1}
+                </span>
+                <span class="font-mono text-[10px] text-slate-500 font-medium">
+                  ${h.date_start || '—'} ${h.date_end ? '— ' + h.date_end : '— дотепер (діє)'}
+                </span>
+              </div>
+              <div class="text-[11px] text-slate-700 font-medium">${h.status || 'Статус окупації / бойових дій'}</div>
+              ${regBadge ? `<div class="mt-1.5 flex items-center gap-2">${regBadge}</div>` : ''}
+            </div>
+          `;
+          histContainer.appendChild(div);
+        });
+      } else if (summary) {
+        const div = document.createElement('div');
+        div.className = 'p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600';
+        div.textContent = 'Підсумок розраховано за поточними статусами населених пунктів. Окремої історії наказів для цього об’єкта в даних немає.';
+        histContainer.appendChild(div);
+      } else if (item.is_occupied) {
+        // Occupied without multi-version history
+        const regActive = item.systems_active === 'Так';
+        const div = document.createElement('div');
+        div.className = 'relative pl-6 pb-2 border-l-2 border-rose-500';
+        div.innerHTML = `
+          <div class="absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-rose-200"></div>
+          <div class="bg-amber-50/80 rounded-xl p-3 border border-amber-200 space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-amber-900 text-xs">Діюча редакція наказу</span>
+              <span class="font-mono text-[10px] text-amber-800 font-semibold">${item.date_start || '—'} ${item.date_end ? '— ' + item.date_end : '— дотепер (діє)'}</span>
+            </div>
+            <div class="text-[11px] text-slate-700">${item.status || 'Зона дій / окупації'}</div>
+            <div class="pt-1 flex items-center gap-2">
+              ${item.systems_active ? (regActive
+            ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200"><i data-lucide="check" class="w-3 h-3"></i> Реєстри функціонують</span>`
+            : `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200"><i data-lucide="x" class="w-3 h-3"></i> Реєстри заблоковані</span>`) : ''}
+            </div>
+          </div>
+        `;
+        histContainer.appendChild(div);
+      } else {
+        // Safe territory
+        const div = document.createElement('div');
+        div.innerHTML = `
+          <div class="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-emerald-900 space-y-1">
+            <div class="font-bold flex items-center gap-1.5 text-xs text-emerald-800">
+              <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i>
+              Під постійним контролем України
+            </div>
+            <p class="text-[11px] text-emerald-700 leading-relaxed">
+              Об'єкт не перебуває у переліку територій активних чи можливих бойових дій або окупації РФ. Державні електронні реєстри та інформаційні системи працюють у штатному режимі.
+            </p>
+          </div>
+        `;
+        histContainer.appendChild(div);
+      }
+
+      // ================= SECTION 2: ХАРАКТЕРИСТИКИ =================
+      document.getElementById('objCardKatottg').textContent = item.katottg || '—';
+      document.getElementById('objCardKey5').textContent = item.katottg_key5 || '—';
+      document.getElementById('objCardPcode').textContent = item.pcode_prefix || '—';
+      document.getElementById('objCardCategoryFull').textContent = `${item.category_name || 'Населений пункт'} (Код: ${item.category || '—'})`;
+      document.getElementById('objCardAdminLevelName').textContent = `Рівень ${item.admin_level} · ${item.admin_level_name || 'Об\'єкт'}`;
+      document.getElementById('objCardParentKatottg').textContent = item.parent_katottg || '—';
+      document.getElementById('objCardArea').textContent = 'Розраховується...';
+
+      const regEl = document.getElementById('objCardCurrentRegistries');
+      const occBadgeEl = document.getElementById('objCardOccupationStatusBadge');
+      if (occBadgeEl) {
+        occBadgeEl.innerHTML = renderStatusBadge(item);
+      }
+
+      if (summary) {
+        const labels = { yes: 'Діють', no: 'Не діють', unknown: 'Не вказано' };
+        regEl.textContent = ['yes', 'no', 'unknown'].filter(key => summary.registries[key]).map(key => `${labels[key]}: ${summary.registries[key].toLocaleString('uk-UA')}`).join(' · ');
+        regEl.className = 'text-xs text-slate-600';
+      } else if (item.is_occupied) {
+        if (item.systems_active === 'Так') {
+          regEl.innerHTML = '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"><span class="w-1.5 h-1.5 rounded-full bg-emerald-600 mr-1.5 flex-shrink-0"></span>Реєстри функціонують (Так)</span>';
+        } else if (item.systems_active === 'Ні') {
+          regEl.innerHTML = '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300"><span class="w-1.5 h-1.5 rounded-full bg-rose-600 mr-1.5 flex-shrink-0"></span>Реєстри заблоковані (Ні)</span>';
+        } else {
+          regEl.innerHTML = '<span class="text-slate-500 font-medium text-xs">—</span>';
+        }
+      } else {
+        regEl.innerHTML = '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300"><span class="w-1.5 h-1.5 rounded-full bg-emerald-600 mr-1.5 flex-shrink-0"></span>Штатний режим (контроль України)</span>';
+      }
+
+      // Settlements count if hromada/raion
+      const setlRow = document.getElementById('objCardSettlementsRow');
+      if (summary) {
+        setlRow.classList.remove('hidden');
+        document.getElementById('objCardSettlementsTotal').textContent = summary.total.toLocaleString('uk-UA');
+        document.getElementById('objCardSettlementsOccupied').textContent = summary.affected.toLocaleString('uk-UA');
+        renderSummaryBreakdown(document.getElementById('objCardStatusBreakdown'), item);
+      } else {
+        setlRow.classList.add('hidden');
+      }
+
+      // ================= SECTION 3: ІЄРАРХІЯ =================
+      document.getElementById('objCardRegion').textContent = item.region_name || '—';
+      document.getElementById('objCardRaion').textContent = item.raion_name || '—';
+      document.getElementById('objCardHromada').textContent = item.hromada_name || '—';
+      document.getElementById('objCardMapBadge').textContent = hierPath || 'Україна';
+
+      // Open map button
+      document.getElementById('objCardBtnOpenMap').onclick = () => { closeObjectCard(); showObjectOnMap(katottgCode); };
+
+      // Show modal with animation
+      objectCardModal.classList.remove('hidden');
+      objectCardModal.classList.add('entering');
+      syncUrlState();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { objectCardModal.classList.remove('entering'); });
+      });
+
+      lucide.createIcons();
+
+      // Init mini-map
+      setTimeout(() => initObjCardMap(item), 80);
+    };
+
+    async function initObjCardMap(item) {
+      const mapLoading = document.getElementById('objCardMapLoading');
+      mapLoading.classList.remove('hidden');
+
+      if (!objCardMapInstance) {
+        objCardMapInstance = L.map('objCardMap', { zoomControl: true, attributionControl: false }).setView([48.37, 31.17], 6);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(objCardMapInstance);
+      }
+
+      // Remove any previous polygon layer
+      if (objCardLayer && objCardMapInstance.hasLayer(objCardLayer)) {
+        objCardMapInstance.removeLayer(objCardLayer);
+        objCardLayer = null;
+      }
+
+      const lvl = item.admin_level || 4;
+      try {
+        let geojson = null;
+        if (lvl === 4) {
+          const oblPcode = (item.pcode_prefix || item.katottg || '').slice(0, 4);
+          if (oblPcode) {
+            try { geojson = await getGeoJsonData('admin4_by_oblast/' + oblPcode); } catch (e) { }
+          }
+        }
+        if (!geojson) {
+          geojson = await getGeoJsonData(lvl);
+        }
+        if (currentCardKatottg !== item.katottg || objectCardModal.classList.contains('hidden')) return;
+
+        // Find ONLY the target feature — nothing else will be rendered on this map
+        const targetFeature = geojson && geojson.features
+          ? geojson.features.find(f => f.properties && f.properties.katottg === item.katottg)
+          : null;
+
+        if (!targetFeature) {
+          console.warn('Feature not found in geojson for katottg:', item.katottg);
+          document.getElementById('objCardArea').textContent = '—';
+          mapLoading.classList.add('hidden');
+          return;
+        }
+
+        // Extract area if available
+        if (targetFeature.properties && targetFeature.properties.area_sqkm) {
+          document.getElementById('objCardArea').textContent = Number(targetFeature.properties.area_sqkm).toFixed(2) + ' км²';
+        } else {
+          document.getElementById('objCardArea').textContent = '—';
+        }
+
+        const cat = getStatusCategory(item);
+        const cols = { mixed: '#8b5cf6', safe: '#10b981', possible: '#f59e0b', active: '#f97316', occupied: '#ef4444' };
+        const strokes = { mixed: '#7c3aed', safe: '#047857', possible: '#b45309', active: '#c2410c', occupied: '#b91c1c' };
+        const fillColor = cols[cat] || cols.safe;
+        const strokeColor = strokes[cat] || strokes.safe;
+
+        // Render ONLY the single selected object's polygon geometry
+        objCardLayer = L.geoJSON({ type: 'FeatureCollection', features: [targetFeature] }, {
+          style: () => ({
+            fillColor,
+            weight: 3.5,
+            opacity: 1,
+            color: strokeColor,
+            fillOpacity: 0.52
+          })
+        }).addTo(objCardMapInstance);
+
+        const bounds = objCardLayer.getBounds();
+        if (bounds.isValid()) {
+          objCardMapInstance.fitBounds(bounds, { maxZoom: 14, padding: [44, 44] });
+          document.getElementById('btnObjCardFitBounds').onclick = () => {
+            if (bounds.isValid()) objCardMapInstance.fitBounds(bounds, { maxZoom: 14, padding: [44, 44] });
+          };
+        }
+
+        // Add interactive tooltip
+        const name = item.name_ua || item.name || '';
+        objCardLayer.bindTooltip(`
+          <div class="text-xs font-bold text-slate-900">${name}</div>
+          <div class="text-[10px] text-slate-500">${item.category_name || ''} · ${item.katottg}</div>
+        `, { sticky: true });
+
+      } catch (err) {
+        console.warn('Could not load geojson for object card', err);
+        document.getElementById('objCardArea').textContent = '—';
+      } finally {
+        mapLoading.classList.add('hidden');
+        setTimeout(() => { if (objCardMapInstance) objCardMapInstance.invalidateSize(); }, 60);
+        setTimeout(() => { if (objCardMapInstance) objCardMapInstance.invalidateSize(); }, 200);
+      }
+    }
+
+    // ===== SHARED SEARCH: MAP RESULTS =====
+    function renderMapSearchResults() {
+      const q = filterSearchInput.value.trim().toLowerCase();
+      mapSearchResults.innerHTML = '';
+      if (currentView !== 'map' || q.length < 2) { mapSearchResults.classList.add('hidden'); return; }
+
+      const matches = filteredData.slice(0, 15);
+
+      if (!matches.length) { mapSearchResults.classList.add('hidden'); return; }
+
+      matches.forEach(item => {
+        const div = document.createElement('button');
+        div.type = 'button';
+        div.className = 'block w-full text-left px-3 py-2 text-xs hover:bg-slate-50 border-b border-slate-100 last:border-0';
+        const name = item.name_ua || item.name || 'Без назви';
+        const hierarchy = [item.region_name, item.raion_name].filter(Boolean).join(' › ');
+        const title = document.createElement('div');
+        title.className = 'font-semibold text-slate-900'; title.textContent = name;
+        const details = document.createElement('div');
+        details.className = 'text-slate-500 text-xs font-mono'; details.textContent = `${item.katottg} · ${hierarchy}`;
+        div.append(title, details);
+        div.addEventListener('click', () => {
+          filterSearchInput.value = item.katottg;
+          btnClearSearchInput.classList.remove('hidden');
+          applyFilters();
+          mapSearchResults.classList.add('hidden');
+          showObjectOnMap(item.katottg);
+        });
+        mapSearchResults.appendChild(div);
+      });
+      mapSearchResults.classList.remove('hidden');
+    }
+
+    filterSearchInput.addEventListener('keydown', event => {
+      if (event.key === 'Escape') mapSearchResults.classList.add('hidden');
+      if (event.key === 'Enter' && currentView === 'map' && filteredData.length === 1) {
+        mapSearchResults.querySelector('button')?.click();
+      }
+    });
+
+    document.addEventListener('click', e => {
+      if (!filterSearchInput.contains(e.target) && !mapSearchResults.contains(e.target)) {
+        mapSearchResults.classList.add('hidden');
+      }
+    });
+
+    // Also add showObjectCard button to table rows (inline in renderTable uses a different approach - we hook it globally)
+    window.showObjectCard = window.showObjectCard; // already defined above
+
+    // ===== STARTUP =====
+    window.addEventListener('DOMContentLoaded', loadDataUpdateDate);
+    window.addEventListener('DOMContentLoaded', loadInitialData);
+  </script>
+</body>
+
+</html>
