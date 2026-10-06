@@ -10,7 +10,7 @@
     const enumValue = (key, allowed, fallback) => allowed.includes(p.get(key)) ? p.get(key) : fallback;
     const code = key => /^UA\d{17}$/.test(p.get(key) || '') ? p.get(key) : null;
     return {
-      view: enumValue('view', ['table', 'hierarchy', 'map'], 'table'),
+      view: enumValue('view', ['map', 'table', 'hierarchy'], 'map'),
       level: enumValue('level', ['all', '1', '2', '3', '4'], null),
       mode: enumValue('mode', ['all', 'safe', 'mixed', 'occupied'], 'all'),
       status: enumValue('status', ['all', 'safe', 'occupied', 'active', 'possible'], 'all'),
