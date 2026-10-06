@@ -300,7 +300,7 @@
                   <span>Структурувати архів за папками рівнів (<code class="font-mono">1_oblasts/</code>, <code class="font-mono">2_raions/</code>...)</span>
                 </label>
                 <label class="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
-                  <input type="checkbox" id="chkRegionalSplit" class="rounded text-indigo-600 focus:ring-indigo-500">
+                  <input type="checkbox" id="chkRegionalSplit" checked class="rounded text-indigo-600 focus:ring-indigo-500">
                   <span>Генерувати розбивку населених пунктів за областями (~3-5 МБ)</span>
                 </label>
                 <label class="flex items-center space-x-2 text-xs text-slate-700 cursor-pointer">
@@ -1205,7 +1205,7 @@
 
                 // If Level 4 and regional split enabled, collect per oblast
                 if (item.level === 4 && doRegionalSplit) {
-                  const regCode = p.adm1_pcode || 'UNKNOWN';
+                  const regCode = p.adm1_pcode || (p.katottg || '').slice(0, 4) || 'UNKNOWN';
                   const regName = p.adm1_name1 || 'Інші';
                   if (!regionalGroups[regCode]) {
                     regionalGroups[regCode] = { regName: regName, features: [] };
@@ -1295,6 +1295,25 @@
       URL.revokeObjectURL(url);
     };
 
+    function addRegionalChunks(zip, item) {
+      const entries = {};
+      if (item.level !== 4 || !chkRegionalSplit.checked || !item.regionalSettlements) return entries;
+      for (const [regCode, regData] of Object.entries(item.regionalSettlements)) {
+        const geo = { type: 'FeatureCollection', name: `settlements_${regCode}`,
+          properties: { region_pcode: regCode, region_name: regData.regName, features_count: regData.features.length },
+          features: regData.features };
+        const filename = `settlements_by_region/${regCode}_settlements.geojson`;
+        const text = JSON.stringify(geo);
+        zip.file(filename, text);
+        // Runtime paths used by the map and object-card geographic lookup.
+        const viewerFile = /^UA\d{2}$/.test(regCode) ? `admin4_by_oblast/${regCode}.json` : null;
+        if (viewerFile) zip.file(viewerFile, text);
+        entries[regCode] = { region_name: regData.regName, features_count: regData.features.length,
+          file: filename, viewer_file: viewerFile };
+      }
+      return entries;
+    }
+
     // Download structured ZIP archive
     btnDownloadAllGeoZip.addEventListener('click', async () => {
       const readyFiles = batchGeoFiles.filter(f => f.status === 'done' && f.optData);
@@ -1311,7 +1330,6 @@
       try {
         const zip = new JSZip();
         const useLevelFolders = chkLevelFolders.checked;
-        const doRegionalSplit = chkRegionalSplit.checked;
         const doManifest = chkManifest.checked;
 
         const manifest = {
@@ -1348,30 +1366,7 @@
             size_bytes: item.optSize
           };
 
-          // If Level 4 has regional split
-          if (item.level === 4 && doRegionalSplit && item.regionalSettlements) {
-            for (const [regCode, regData] of Object.entries(item.regionalSettlements)) {
-              const regGeojson = {
-                type: "FeatureCollection",
-                name: `settlements_${regCode}`,
-                properties: {
-                  region_pcode: regCode,
-                  region_name: regData.regName,
-                  features_count: regData.features.length
-                },
-                features: regData.features
-              };
-              const regFilename = `settlements_by_region/${regCode}_settlements.geojson`;
-              const regJsonStr = JSON.stringify(regGeojson);
-              zip.file(regFilename, regJsonStr);
-
-              manifest.regional_settlements[regCode] = {
-                region_name: regData.regName,
-                features_count: regData.features.length,
-                file: regFilename
-              };
-            }
-          }
+          Object.assign(manifest.regional_settlements, addRegionalChunks(zip, item));
         }
 
         // Include data.json if generated or loaded
@@ -1449,6 +1444,7 @@
             path: './data_files/data.json'
           }
         };
+        const regionalSettlements = {};
         if (generatedWorkbookBytes) {
           zip.file('katottg_merged.xlsx', generatedWorkbookBytes);
           manifestFiles['katottg_merged.xlsx'] = {
@@ -1466,6 +1462,7 @@
           for (const item of readyGeoFiles) {
             const outName = item.outName || getOutputFilename(item.name);
             zip.file(outName, item.optData);
+            Object.assign(regionalSettlements, addRegionalChunks(zip, item));
             manifestFiles[outName] = {
               level: item.level,
               path: `./data_files/${outName}`,
@@ -1523,7 +1520,8 @@
             total_records: dataJsonToPack.length,
             path: "./data_files/data.json"
           },
-          files: manifestFiles
+          files: manifestFiles,
+          regional_settlements: regionalSettlements
         };
 
         zip.file('manifest.json', JSON.stringify(manifest, null, 2));
