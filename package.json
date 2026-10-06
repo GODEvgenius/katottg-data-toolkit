@@ -4,7 +4,7 @@
   "private": true,
   "description": "Prepare Ukraine's KATOTTG and territorial-status tables from Word and Excel, export JSON/XLSX, and connect the results to GeoJSON.",
   "scripts": {
-    "test": "node tools/tests/converter_core.test.cjs && node tools/tests/status_summary.test.cjs && node tools/tests/registry.test.cjs",
+    "test": "node tools/tests/converter_core.test.cjs && node tools/tests/status_summary.test.cjs && node tools/tests/registry.test.cjs && node tools/tests/settlement_map.test.cjs",
     "test:core": "node tools/tests/converter_core.test.cjs",
     "test:summary": "node tools/tests/status_summary.test.cjs",
     "test:registry": "node tools/tests/registry.test.cjs",

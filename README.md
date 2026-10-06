@@ -67,11 +67,13 @@ Create `data_files/` in the project root and copy your generated files there. Se
 | `data_files/data.json` | Required prepared record array from the converter |
 | `data_files/manifest.json` | Optional package metadata; `updated_at` in `YYYY-MM-DD` format provides the displayed update date |
 | `data_files/ukr_admin1.geojson` through `ukr_admin4.geojson` | Geographic layers for regions, districts, communities and settlements |
-| `data_files/admin4_by_oblast/*.json` | Optional generated settlement chunks for geographic lookup |
+| `data_files/admin4_by_oblast/UAxx.json` | Recommended regional settlement chunks for the map and object lookup |
 
 Each prepared record includes `katottg`, `admin_level`, `name`, `parent_katottg`, administrative location names, category, status, registry availability, dates and source history. Use the converter's output rather than constructing records from short display identifiers. Geographic files require compatible join fields; review the enrichment report after import.
 
 Table and hierarchy views work with prepared JSON. Map features need your geographic files. The viewer also uses online interface resources and map tiles.
+
+The settlement map shows region outlines at the national scale. Zoom in or select a search result to see settlement boundaries. Only polygons intersecting the visible area are drawn, using Canvas and small rendering batches. Regional chunks avoid downloading the full settlement layer; enable the converter's regional split when exporting the geographic ZIP and place `admin4_by_oblast/` inside `data_files/`. Older packages without chunks still work using `ukr_admin4.geojson`, but their first detailed map load is larger. Filters and result counts continue to cover the complete registry, while the map reports the number of geographic contours in its visible area.
 
 Upper-level filters use three mutually exclusive groups: full control, mixed, and all level-4 records affected by occupation or hostilities. A mixed territory has both controlled and affected records. Level-4 city districts are counted as city districts when supplied. The URL preserves the view, location, query, filters and open card; a card can copy that link.
 
@@ -95,6 +97,7 @@ tools/prepare_data.html        Word/Excel and geographic preparation interface
 tools/prepare_data_core.js     Import, normalization, merge and workbook export
 tools/status_summary.js       Shared settlement-based parent summaries
 tools/registry_url_state.js   Address-state parsing and serialization
+tools/settlement_map.js        Viewport loading and settlement map rendering
 tools/vendor/                 Local libraries and their licence notices
 tools/tests/                  Source-only regression checks
 docs/                         Source references, pipeline and presentation material

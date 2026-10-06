@@ -29,6 +29,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="tools/status_summary.js"></script>
   <script src="tools/registry_url_state.js"></script>
+  <script src="tools/settlement_map.js"></script>
 
   <style>
     .glass-panel {
@@ -466,6 +467,10 @@
               <span>Рівень 4: Поселення</span><span class="text-[10px] opacity-80">29.7 тис</span>
             </button>
           </div>
+          <div id="mapSettlementStatus" class="hidden border-t border-slate-200 pt-2 text-xs text-slate-600" role="status" aria-live="polite">
+            <p id="mapSettlementMessage"></p>
+            <button type="button" id="btnMapSettlementAction" class="hidden mt-2 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100">Наблизити карту</button>
+          </div>
         </div>
       </div>
 
@@ -829,6 +834,12 @@
     let mapInstance = null;
     let mapInitialized = false;
     let mapLoadPromise = null;
+    let mapLevelRevision = 0;
+    const mapLayerPromises = {};
+    let settlementMap = null;
+    let settlementRefreshTimer = null;
+    let searchFilterTimer = null;
+    let mapObjectRevision = 0;
 
     // ===== ELEMENTS =====
     const btnSwitchTable = document.getElementById('btnSwitchTable');
@@ -900,6 +911,11 @@
     function switchView(v) {
       const mapLevel = currentMapLevel;
       currentView = v;
+      if (v !== 'map') {
+        mapObjectRevision++;
+        clearTimeout(settlementRefreshTimer);
+        if (settlementMap) settlementMap.cancel();
+      }
       viewTable.classList.add('hidden'); viewHierarchy.classList.add('hidden'); viewMap.classList.add('hidden');
       btnSwitchTable.className = INACTIVE_TAB; btnSwitchHierarchy.className = INACTIVE_TAB; btnSwitchMap.className = INACTIVE_TAB;
       if (v === 'table') { viewTable.classList.remove('hidden'); btnSwitchTable.className = ACTIVE_TAB; }
@@ -1313,6 +1329,7 @@
     }
 
     function applyFilters() {
+      clearTimeout(searchFilterTimer);
       syncViewLevel();
       if (selectLevel.value === '4' && currentFilterMode === 'mixed') currentFilterMode = 'all';
       updateFilterModeUI();
@@ -1323,7 +1340,7 @@
       filteredKatottgCodes = new Set(filteredData.map(item => item.katottg));
 
       currentPage = 1;
-      renderTable();
+      if (currentView === 'table') renderTable();
       let candidates = pool;
       if (currentView === 'hierarchy') {
         renderHierarchy();
@@ -1346,12 +1363,16 @@
       btnExportCsv.classList.toggle('opacity-40', count === 0);
       updateFilterSummary();
       renderMapSearchResults();
-      if (mapInstance && mapLayers[currentMapLevel]) updateMapFilter();
+      if (currentView === 'map' && mapInstance) updateMapFilter();
       syncUrlState();
     }
 
     // ===== FILTER LISTENERS =====
-    filterSearchInput.addEventListener('input', () => { btnClearSearchInput.classList.toggle('hidden', !filterSearchInput.value); applyFilters(); });
+    filterSearchInput.addEventListener('input', () => {
+      btnClearSearchInput.classList.toggle('hidden', !filterSearchInput.value);
+      clearTimeout(searchFilterTimer);
+      searchFilterTimer = setTimeout(applyFilters, 180);
+    });
     btnClearSearchInput.addEventListener('click', () => { clearSharedSearch(); applyFilters(); });
 
     if (btnFilterModeAll) btnFilterModeAll.addEventListener('click', () => setFilterMode('all'));
@@ -1784,8 +1805,10 @@
       L.control.zoom({ position: 'bottomright' }).addTo(mapInstance);
       L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(mapInstance);
       mapLoadPromise = loadMapLevel(level);
+      mapInstance.on('movestart', () => { if (settlementMap && currentMapLevel === 4) settlementMap.invalidate(); });
+      mapInstance.on('moveend', () => { if (currentMapLevel === 4 && currentView === 'map') scheduleSettlementRefresh(); });
       document.querySelectorAll('.map-level-btn').forEach(btn => {
-        btn.addEventListener('click', () => loadMapLevel(Number(btn.getAttribute('data-map-level'))));
+        btn.addEventListener('click', () => { mapObjectRevision++; mapLoadPromise = loadMapLevel(Number(btn.getAttribute('data-map-level'))); });
       });
       // Map mode buttons are already wired to setFilterMode()
     }
@@ -1815,9 +1838,13 @@
     }
 
     async function loadMapLevel(level) {
+      const request = ++mapLevelRevision;
+      clearTimeout(settlementRefreshTimer);
+      if (settlementMap) settlementMap.cancel();
       currentMapLevel = level;
       if (currentView === 'map') applyFilters();
-      showLoader('Завантаження карти...', 'Рівень ' + level);
+      if (level !== 4) showLoader('Завантаження карти...', 'Рівень ' + level);
+      else hideLoader();
       [1, 2, 3, 4].forEach(l => { if (mapLayers[l] && mapInstance.hasLayer(mapLayers[l])) mapInstance.removeLayer(mapLayers[l]); });
       document.querySelectorAll('.map-level-btn').forEach(btn => {
         const l = Number(btn.getAttribute('data-map-level'));
@@ -1825,32 +1852,73 @@
       });
       const names = { 1: 'Регіони', 2: 'Райони', 3: 'Громади', 4: 'Населені пункти' };
       document.getElementById('mapActiveLevelBadge').textContent = names[level] || 'Рівень ' + level;
+      document.getElementById('mapSettlementStatus').classList.toggle('hidden', level !== 4);
       try {
+        if (level === 4) {
+          if (!settlementMap) settlementMap = SettlementMap.createViewportLayer({
+            map: mapInstance, L, loadGeoJson: getGeoJsonData, style: getMapStyle,
+            onFeature: showMapFeatureDetails, onStatus: updateSettlementStatus
+          });
+          clearTimeout(settlementRefreshTimer);
+          await settlementMap.refresh();
+          return;
+        }
         if (!mapLayers[level]) {
-          const resp = await fetch('data_files/ukr_admin' + level + '.geojson');
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          const geojson = await resp.json();
-          mapLayers[level] = L.geoJSON(geojson, {
+          if (!mapLayerPromises[level]) mapLayerPromises[level] = getGeoJsonData(level).then(geojson => L.geoJSON(geojson, {
             style: getMapStyle,
             onEachFeature: (feature, layer) => {
               layer.on({
                 mouseover: e => { e.target.setStyle({ weight: 3, color: '#1d4ed8', fillOpacity: 0.85 }); e.target.bringToFront(); },
-                mouseout: e => { mapLayers[level].resetStyle(e.target); },
+                mouseout: e => { e.target.setStyle(getMapStyle(e.target.feature)); },
                 click: e => { showMapFeatureDetails(e.target.feature); }
               });
             }
-          });
+          })).finally(() => { delete mapLayerPromises[level]; });
+          mapLayers[level] = await mapLayerPromises[level];
         }
-        if (currentMapLevel !== level) return;
+        if (request !== mapLevelRevision || currentView !== 'map') return;
         mapLayers[level].addTo(mapInstance);
         updateMapFilter();
-      } catch (err) { console.error(err); } finally { hideLoader(); }
+      } catch (err) { console.error(err); } finally { if (request === mapLevelRevision) hideLoader(); }
     }
 
-    function updateMapFilter() { if (mapLayers[currentMapLevel]) mapLayers[currentMapLevel].setStyle(getMapStyle); }
+    function scheduleSettlementRefresh() {
+      if (!settlementMap || currentMapLevel !== 4 || currentView !== 'map') return;
+      settlementMap.invalidate();
+      clearTimeout(settlementRefreshTimer);
+      settlementRefreshTimer = setTimeout(() => {
+        if (currentMapLevel === 4 && currentView === 'map') mapLoadPromise = settlementMap.refresh();
+      }, 100);
+    }
+
+    function updateSettlementStatus(state) {
+      const panel = document.getElementById('mapSettlementStatus');
+      const message = document.getElementById('mapSettlementMessage');
+      const action = document.getElementById('btnMapSettlementAction');
+      panel.dataset.phase = state.phase;
+      panel.dataset.shown = String(state.shown || 0);
+      action.classList.toggle('hidden', !['overview', 'error', 'partial'].includes(state.phase));
+      action.textContent = state.phase === 'overview' ? 'Наблизити карту' : 'Повторити завантаження';
+      if (state.phase === 'overview') message.textContent = 'Наблизьте карту, щоб побачити межі населених пунктів. Пошук доступний на будь-якому масштабі.';
+      else if (state.phase === 'loading') message.textContent = 'Завантаження видимої ділянки… Карту можна рухати.';
+      else if (state.phase === 'error') message.textContent = 'Не вдалося завантажити межі. Перевірте геодані або повторіть спробу.';
+      else message.textContent = `На карті: ${(state.shown || 0).toLocaleString('uk-UA')} ${getPlural(state.shown || 0, 'контур', 'контури', 'контурів')} у поточній ділянці.` +
+        (state.phase === 'partial' ? ' Частину геоданих не вдалося завантажити.' : '');
+    }
+
+    document.getElementById('btnMapSettlementAction').addEventListener('click', () => {
+      if (mapInstance.getZoom() < settlementMap.minZoom) mapInstance.setZoom(settlementMap.minZoom);
+      else scheduleSettlementRefresh();
+    });
+
+    function updateMapFilter() {
+      if (currentMapLevel === 4) scheduleSettlementRefresh();
+      else if (mapLayers[currentMapLevel]) mapLayers[currentMapLevel].setStyle(getMapStyle);
+    }
 
     const mapSidebar = document.getElementById('mapObjectSidebar');
     function showMapFeatureDetails(feature) {
+      mapObjectRevision++;
       const p = feature.properties || {};
       const live = getLiveItem(p);
       const activeObj = live || p;
@@ -1890,13 +1958,19 @@
       syncUrlState();
     }
 
-    document.getElementById('btnMapCloseSidebar').addEventListener('click', () => { mapSidebar.classList.add('hidden'); currentMapObjectKatottg = null; syncUrlState(); });
+    document.getElementById('btnMapCloseSidebar').addEventListener('click', () => {
+      mapObjectRevision++; mapSidebar.classList.add('hidden'); currentMapObjectKatottg = null;
+      if (mapSingleHighlightLayer && mapInstance) { mapInstance.removeLayer(mapSingleHighlightLayer); mapSingleHighlightLayer = null; }
+      syncUrlState();
+    });
 
     let mapSingleHighlightLayer = null;
     window.showObjectOnMap = async function (katottgCode) {
       if (currentView !== 'map') switchView('map');
+      const selection = ++mapObjectRevision;
       if (mapLoadPromise) await mapLoadPromise;
-      const item = allData.find(d => d.katottg === katottgCode);
+      if (selection !== mapObjectRevision || currentView !== 'map') return;
+      const item = allDataByKatottg.get(katottgCode);
       if (!item) return;
       const lvl = item.admin_level || 4;
 
@@ -1905,9 +1979,10 @@
         mapSingleHighlightLayer = null;
       }
 
-      // If settlement (lvl 4), load Gromadas as context, fetch single polygon and highlight directly
-      const bgLevel = lvl === 4 ? 3 : lvl;
+      // Keep settlements on their own layer; nearby polygons load after fitting the selected object.
+      const bgLevel = lvl;
       await loadMapLevel(bgLevel);
+      if (selection !== mapObjectRevision || currentView !== 'map' || currentMapLevel !== bgLevel) return;
 
       let targetFeature = null;
       if (lvl === 4) {
@@ -1927,7 +2002,8 @@
         });
       }
 
-      if (targetFeature) {
+      if (targetFeature && selection === mapObjectRevision && currentView === 'map' && currentMapLevel === bgLevel) {
+        mapSearchResults.classList.add('hidden');
         showMapFeatureDetails(targetFeature);
         const cat = getStatusCategory(item);
         const cols = { mixed: '#8b5cf6', safe: '#10b981', possible: '#f59e0b', active: '#f97316', occupied: '#ef4444' };
@@ -1943,6 +2019,7 @@
     let objCardLayer = null;
     let currentCardKatottg = null;
     const geoJsonCache = {};
+    const geoJsonPending = {};
 
     const objectCardModal = document.getElementById('objectCardModal');
     document.getElementById('btnCloseObjectCard').addEventListener('click', closeObjectCard);
@@ -1966,9 +2043,18 @@
         } else {
           url = 'data_files/ukr_admin' + key + '.geojson';
         }
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status + ' for ' + url);
-        geoJsonCache[key] = await resp.json();
+        if (!geoJsonPending[key]) geoJsonPending[key] = (async () => {
+          const resp = await fetch(url);
+          if (!resp.ok) {
+            const error = new Error('HTTP ' + resp.status + ' for ' + url);
+            error.status = resp.status; throw error;
+          }
+          geoJsonCache[key] = await resp.json();
+          const chunkKeys = Object.keys(geoJsonCache).filter(k => k.startsWith('admin4_by_oblast/'));
+          if (chunkKeys.length > 8) delete geoJsonCache[chunkKeys[0]];
+          return geoJsonCache[key];
+        })().finally(() => { delete geoJsonPending[key]; });
+        return geoJsonPending[key];
       }
       return geoJsonCache[key];
     }
@@ -2299,6 +2385,7 @@
     }
 
     filterSearchInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') applyFilters();
       if (event.key === 'Escape') mapSearchResults.classList.add('hidden');
       if (event.key === 'Enter' && currentView === 'map' && filteredData.length === 1) {
         mapSearchResults.querySelector('button')?.click();
