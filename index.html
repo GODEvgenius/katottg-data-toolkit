@@ -174,17 +174,17 @@
 
       <!-- VIEW SWITCHER -->
       <div class="flex items-center p-1 bg-slate-100 border border-slate-200 rounded-xl">
-        <button id="btnSwitchTable" aria-label="Таблиця"
+        <button id="btnSwitchMap" aria-label="Карта"
           class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs bg-white text-blue-700">
+          <i data-lucide="map" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Карта</span>
+        </button>
+        <button id="btnSwitchTable" aria-label="Таблиця"
+          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all">
           <i data-lucide="table" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Таблиця</span>
         </button>
         <button id="btnSwitchHierarchy" aria-label="Ієрархія"
           class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all">
           <i data-lucide="folder-tree" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Ієрархія</span>
-        </button>
-        <button id="btnSwitchMap" aria-label="Карта"
-          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all">
-          <i data-lucide="map" class="w-3.5 h-3.5"></i><span class="hidden sm:inline">Карта</span>
         </button>
       </div>
 
@@ -348,8 +348,8 @@
   <!-- WORKSPACE -->
   <main class="flex-1 relative overflow-hidden bg-slate-100">
 
-    <!-- TAB 1: TABLE -->
-    <div id="viewTable" class="h-full flex flex-col overflow-hidden bg-white">
+    <!-- TABLE VIEW -->
+    <div id="viewTable" class="hidden h-full flex flex-col overflow-hidden bg-white">
       <div class="flex-1 overflow-auto">
         <table class="min-w-full divide-y divide-slate-200 text-xs">
           <thead class="bg-slate-50 text-slate-600 font-semibold sticky top-0 z-10 border-b border-slate-200">
@@ -398,7 +398,7 @@
       </div>
     </div>
 
-    <!-- TAB 2: HIERARCHY -->
+    <!-- HIERARCHY VIEW -->
     <div id="viewHierarchy" class="hidden h-full flex flex-col bg-slate-50 overflow-hidden">
       <div class="bg-white border-b border-slate-200 px-4 sm:px-6 py-2 flex flex-wrap items-center gap-x-4 gap-y-2 flex-shrink-0">
         <nav aria-label="Адміністративна ієрархія" class="flex flex-wrap items-center gap-1.5 text-sm flex-1 min-w-0">
@@ -421,8 +421,8 @@
       </div>
     </div>
 
-    <!-- TAB 3: MAP -->
-    <div id="viewMap" class="hidden h-full relative">
+    <!-- MAP VIEW -->
+    <div id="viewMap" class="h-full relative">
       <div class="absolute top-4 left-4 z-20 flex flex-col space-y-3 pointer-events-auto max-w-[280px]">
         <div class="glass-panel rounded-2xl p-3.5 shadow-lg border border-slate-200 space-y-3">
           <div class="flex items-center justify-between pb-2 border-b border-slate-200">
@@ -821,7 +821,7 @@
     let currentPage = 1;
     let pageSize = 50;
     let hierState = { level: 1, oblast: null, raion: null, hromada: null, hromadaKatottg: null, _isSpecialCity: false };
-    let currentView = 'table';
+    let currentView = 'map';
     let hierarchyVisibleItems = [];
     let filteredKatottgCodes = new Set();
     let currentMapLevel = 1;
