@@ -33,7 +33,7 @@ element('objectCardModal').classList.add('hidden'); element('mapObjectSidebar').
 const context = { console, URL, Map, Set, StatusSummary: require('../status_summary.js'), RegistryUrlState: require('../registry_url_state.js'),
   lucide: { createIcons() {} }, location: { href: 'http://127.0.0.1:8765/' },
   document: { getElementById: element, createElement: () => new Element(), querySelectorAll: () => [], addEventListener() {}, body: new Element() },
-  addEventListener() {}, setTimeout() {}, requestAnimationFrame: fn => fn(),
+  addEventListener() {}, setTimeout() {}, clearTimeout() {}, requestAnimationFrame: fn => fn(),
   navigator: { clipboard: { writeText: async () => {} } }
 };
 context.window = context;

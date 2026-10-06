@@ -143,6 +143,9 @@ async function run() {
     assert(archive.file('data.json'));
     assert(archive.file('katottg_merged.xlsx'));
     assert(archive.file('ukr_admin4.geojson'));
+    assert(archive.file('admin4_by_oblast/UA12.json'));
+    const chunk = JSON.parse(await archive.file('admin4_by_oblast/UA12.json').async('string'));
+    assert.equal(chunk.features[0].properties.katottg, firstCode);
     assert.equal(JSON.parse(await archive.file('data.json').async('string')).length, 10856);
     console.log('PASS: geoconnection still uses generated JSON; complete ZIP includes XLSX and JSON');
     await page.evaluate(() => window.scrollTo(0, 0));
