@@ -49,6 +49,6 @@ assert.equal(index.get(fixtureCodes.city).cityDistricts, 3);
 const state = { view: 'hierarchy', level: '4', region: codes[0], raion: codes[1], hromada: codes[2], q: 'Назва & код',
   mode: 'occupied', status: 'active', registries: 'no', card: codes[3], mapobject: null, hromada_name: '' };
 assert.deepEqual(UrlState.read(UrlState.write('http://127.0.0.1:8765/', state)), state);
-assert.equal(UrlState.read('http://127.0.0.1:8765/?view=bad&level=99&mode=bad&card=garbage').view, 'table');
+assert.equal(UrlState.read('http://127.0.0.1:8765/?view=bad&level=99&mode=bad&card=garbage').view, 'map');
 assert.equal(UrlState.read('http://127.0.0.1:8765/?card=garbage').card, null);
 console.log('PASS: synthetic counts, disjoint groups, exact fractions, legacy city codes, converter parent summaries, source history and URL state');
